@@ -73,11 +73,25 @@ fn wav_roundtrip_preserves_samples() {
 
 #[test]
 fn process_channel_receives_valid_wav() {
-    // 用 {wav} 占位符让脚本自己检查文件是否存在且非空
-    let mut ch =
-        ProcessChannel::from_command_line("probe", r#"sh -c "test -s {wav} && echo 收到音频""#);
+    // Ensure {wav} is replaced with an actual nonempty WAV file path.
+    // Use native PowerShell on Windows; do not rely on the Git Bash shell.
+    #[cfg(windows)]
+    let command = vec![
+        "powershell.exe".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-Command".into(),
+        "if ((Get-Item -LiteralPath '{wav}').Length -gt 44) { Write-Output 'WAV_OK' }".into(),
+    ];
+    #[cfg(not(windows))]
+    let command = vec![
+        "sh".into(),
+        "-c".into(),
+        "test -s \"{wav}\" && echo WAV_OK".into(),
+    ];
+    let mut ch = ProcessChannel::new("probe", command);
     ch.feed(&tone(10, 4000));
-    assert_eq!(ch.finish().as_deref(), Some("收到音频"));
+    assert_eq!(ch.finish().as_deref(), Some("WAV_OK"));
 }
 
 /// 捕获上屏内容的测试用后端
