@@ -41,6 +41,7 @@ try {
     Copy-Item (Join-Path $root 'core/data/s2t.tsv') (Join-Path $packageDirectory 'data') -Force
     Copy-Item (Join-Path $PSScriptRoot 'install.ps1') $packageDirectory -Force
     Copy-Item (Join-Path $PSScriptRoot 'uninstall.ps1') $packageDirectory -Force
+    Copy-Item (Join-Path $PSScriptRoot 'uninstall.bat') $packageDirectory -Force
     Copy-Item (Join-Path $PSScriptRoot 'settings.ps1') $packageDirectory -Force
     Copy-Item (Join-Path $PSScriptRoot 'README.md') $packageDirectory -Force
 

@@ -36,5 +36,13 @@ $shortcut.WorkingDirectory = $installDirectory
 $shortcut.Description = 'Configure WowType input and AI translation'
 $shortcut.Save()
 
+$uninstallShortcutPath = Join-Path $menu 'Uninstall WowType.lnk'
+$uninstallShortcut = $shell.CreateShortcut($uninstallShortcutPath)
+$uninstallShortcut.TargetPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$uninstallShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$installDirectory\uninstall.ps1`""
+$uninstallShortcut.WorkingDirectory = $installDirectory
+$uninstallShortcut.Description = 'Remove WowType from this Windows user account'
+$uninstallShortcut.Save()
+
 Write-Host 'WowType was installed for this Windows user.'
 Write-Host 'Select WowType from the Windows input switcher. Open WowType Settings to configure AI translation.'

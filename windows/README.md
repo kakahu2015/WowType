@@ -15,7 +15,7 @@ Windows support currently targets Windows 10/11 x64 and uses the Windows Text Se
 
 The installer registers WowType for the current Windows user and does not need administrator access. Press **Win+Space** to select WowType from the input switcher.
 
-To remove it, switch to another input method, then run `uninstall.ps1` from the installed folder at `%LOCALAPPDATA%\Programs\WowType`.
+To remove it, switch to another input method, then open **Start > WowType > Uninstall WowType**. You can also double-click `uninstall.bat` in the extracted package. Your translation settings and API key are kept.
 
 ## Typing and translation
 
