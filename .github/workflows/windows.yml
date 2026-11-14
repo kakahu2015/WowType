@@ -1,0 +1,51 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'windows/**'
+      - 'core/**'
+      - 'spec/**'
+      - 'scripts/make-data.sh'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  data:
+    name: Prepare dictionaries
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dictionaries
+        run: scripts/make-data.sh "" dist/data
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-data
+          path: dist/data
+          retention-days: 1
+
+  windows:
+    name: Build Windows TSF package
+    needs: data
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-data
+          path: dist/data
+      - name: Compile and package
+        shell: pwsh
+        run: ./windows/build.ps1 -DataDirectory dist/data -OutputDirectory dist/windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wowtype-windows-x64
+          path: dist/windows/WowType-*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14

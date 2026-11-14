@@ -9,11 +9,12 @@
 一个 fcitx5 拼音输入法：长句一次打完、打一半就有词、按错键也能认出来，越用越懂你。
 
 [![CI](https://github.com/Gloridust/WowType/actions/workflows/ci.yml/badge.svg)](https://github.com/Gloridust/WowType/actions/workflows/ci.yml)
+[![Windows build](https://github.com/Gloridust/WowType/actions/workflows/windows.yml/badge.svg)](https://github.com/Gloridust/WowType/actions/workflows/windows.yml)
 [![Release](https://img.shields.io/github/v/release/Gloridust/WowType?include_prereleases&label=release)](https://github.com/Gloridust/WowType/releases)
 ![fcitx5](https://img.shields.io/badge/fcitx5-%E2%89%A5%205.1-blue)
 ![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green)
 
-[安装](#安装) · [使用](#使用) · [设置](#设置) · [更多文档](#更多文档) · [常见问题](#常见问题) · [工作原理](#工作原理) · [参与开发](#参与开发)
+[安装](#安装) · [Windows](#windows-预览版) · [使用](#使用) · [设置](#设置) · [更多文档](#更多文档) · [常见问题](#常见问题) · [工作原理](#工作原理) · [参与开发](#参与开发)
 
 [![加入 Telegram 交流群](https://img.shields.io/badge/%E5%8A%A0%E5%85%A5%20Telegram%20%E4%BA%A4%E6%B5%81%E7%BE%A4-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+Kxk-4VkXIS9lODM1)
 
@@ -97,6 +98,7 @@
 - Linux x86_64 或 arm64（aarch64），输入法框架 **fcitx5 5.1 或更新**。Arch 的安装包只有 x86_64
 - 有现成安装包的发行版：**Ubuntu 24.04 / 26.04、Debian 13**（deb）、**Arch Linux** 及 EndeavourOS / Garuda / CachyOS（pkg.tar.zst）、**Fedora**（[rpm](#fedora)）、**NixOS**（[flake](#nixos--nix)）。其他发行版请[从源码构建](docs/INSTALL.md)
 - Ubuntu 22.04 自带的 fcitx5 是 5.0，不支持
+- **Windows 10/11 x64（预览版）**，见下面的 [Windows](#windows-预览版)
 - **macOS 12 或更新**（Apple 芯片和 Intel 都行），见下面的 [macOS](#macos)
 
 ### 一行命令安装（推荐）
@@ -154,6 +156,12 @@ curl -fsSL https://raw.githubusercontent.com/Gloridust/WowType/main/install.sh |
   `~/Library/Application Support/WowType/wowtype.conf`，见 [docs/CONFIG.md](docs/CONFIG.md#macos)
 - 卸载：菜单栏的输入法里先换成别的输入法，在访达里按 `⇧⌘G` 打开 `~/Library/Input Methods`，把 WowType 拖到废纸篓，
   再到「系统设置 → 键盘 → 输入法」里把它移除
+
+### Windows（预览版）
+
+目前提供 Windows 10/11 x64 输入法预览包。打开 [Windows build Actions](https://github.com/Gloridust/WowType/actions/workflows/windows.yml)，进入最新成功的运行，下载 `wowtype-windows-x64` artifact 并解压。安装和使用说明见 [windows/README.md](windows/README.md)。
+
+预览版包含拼音输入、候选与学习、中文标点、在线大模型互译配置；语音输入、工具栏和完整设置页尚未移植。
 
 ### 手动安装
 
