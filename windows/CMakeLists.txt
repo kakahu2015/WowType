@@ -21,7 +21,7 @@ target_include_directories(wowtype_text_service PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(wowtype_text_service PRIVATE
     "${WOWTYPE_CORE_IMPORT_LIB}"
-    msctf ole32 uuid user32 gdi32 advapi32)
+    ole32 uuid user32 gdi32 advapi32)
 set_target_properties(wowtype_text_service PROPERTIES
     OUTPUT_NAME "WowTypeTextService"
     PREFIX "")
