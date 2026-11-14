@@ -13,12 +13,12 @@ std::wstring GuidString(REFGUID guid) {
     return text;
 }
 
-HRESULT WriteComRegistration() {
+HRESULT WriteComRegistrationUnder(HKEY root) {
     const std::wstring keyPath = L"Software\\Classes\\CLSID\\" +
                                  GuidString(CLSID_WowTypeTextService) +
                                  L"\\InprocServer32";
     HKEY key = nullptr;
-    const LONG opened = RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr,
+    const LONG opened = RegCreateKeyExW(root, keyPath.c_str(), 0, nullptr,
                                         REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr,
                                         &key, nullptr);
     if (opened != ERROR_SUCCESS) return HRESULT_FROM_WIN32(opened);
@@ -43,9 +43,23 @@ HRESULT WriteComRegistration() {
     return result == ERROR_SUCCESS ? S_OK : HRESULT_FROM_WIN32(result);
 }
 
+HRESULT WriteComRegistration() {
+    // The Win+Space switcher is rendered by TextInputHost.exe, an AppContainer
+    // process whose registry view excludes HKCU\Software\Classes. A per-user
+    // class is therefore invisible to the switcher even though TSF itself
+    // enumerates the profile, which leaves every other input method selectable
+    // but not this one. Register machine-wide and mirror to the user hive for
+    // legacy consumers that still read HKCU.
+    const HRESULT machine = WriteComRegistrationUnder(HKEY_LOCAL_MACHINE);
+    if (FAILED(machine)) return machine;
+    WriteComRegistrationUnder(HKEY_CURRENT_USER);
+    return S_OK;
+}
+
 void RemoveComRegistration() {
     const std::wstring keyPath = L"Software\\Classes\\CLSID\\" +
                                  GuidString(CLSID_WowTypeTextService);
+    RegDeleteTreeW(HKEY_LOCAL_MACHINE, keyPath.c_str());
     RegDeleteTreeW(HKEY_CURRENT_USER, keyPath.c_str());
 }
 

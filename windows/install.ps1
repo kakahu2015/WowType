@@ -3,6 +3,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'WowType registers a machine-wide TSF class so the Win+Space switcher can see it. Rerun this script from an elevated PowerShell (Run as administrator).'
+}
 $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\WowType'
 $required = @('WowTypeTextService.dll', 'wowtype_core.dll', 'data\lexicon.tsv', 'data\english.txt')
 foreach ($item in $required) {

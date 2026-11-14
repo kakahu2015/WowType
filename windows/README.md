@@ -6,16 +6,16 @@ Windows support currently targets Windows 10/11 x64 and uses the Windows Text Se
 
 1. Open the [Windows build workflow](https://github.com/Gloridust/WowType/actions/workflows/windows.yml) and select the latest successful run.
 2. Download the `wowtype-windows-x64` artifact and extract it.
-3. Open PowerShell in the extracted folder and run:
+3. Open **PowerShell as Administrator** in the extracted folder and run:
 
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass
    .\install.ps1
    ```
 
-The installer registers WowType for the current Windows user and does not need administrator access. Press **Win+Space** to select WowType from the input switcher.
+The installer registers WowType as a machine-wide TSF text service, so it needs an elevated shell; the binaries themselves still land in your user profile. A per-user registration is invisible to the Win+Space switcher, because that UI runs inside an AppContainer whose registry view excludes `HKCU\Software\Classes`. Press **Win+Space** to select WowType from the input switcher.
 
-To remove it, switch to another input method, then open **Start > WowType > Uninstall WowType**. You can also double-click `uninstall.bat` in the extracted package. Your translation settings and API key are kept.
+To remove it, switch to another input method, then run **Start > WowType > Uninstall WowType** from an elevated PowerShell. You can also run `uninstall.bat` as administrator from the extracted package. Your translation settings and API key are kept.
 
 ## Typing and translation
 

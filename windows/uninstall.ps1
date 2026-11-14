@@ -1,4 +1,8 @@
 $ErrorActionPreference = 'Stop'
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'WowType registers a machine-wide TSF class, so removing it also requires an elevated PowerShell (Run as administrator).'
+}
 $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\WowType'
 $dll = Join-Path $installDirectory 'WowTypeTextService.dll'
 $regsvr = Join-Path $env:WINDIR 'System32\regsvr32.exe'
