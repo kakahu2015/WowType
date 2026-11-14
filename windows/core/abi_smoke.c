@@ -37,6 +37,9 @@ typedef WowtypeSession *(*SessionNew)(WowtypeEngineHandle *, const WowtypeSessio
 typedef void (*SessionFree)(WowtypeSession *);
 typedef const WowtypeFrame *(*SessionKey)(WowtypeSession *, const WowtypeKey *);
 typedef const char *(*SessionCandidate)(WowtypeSession *, size_t);
+typedef int (*SessionView)(WowtypeSession *, WowtypeSessionView *);
+typedef size_t (*CandidateTotal)(WowtypeSession *);
+typedef const WowtypeFrame *(*SessionReset)(WowtypeSession *, int);
 typedef const WowtypeFrame *(*SessionSelect)(WowtypeSession *, size_t);
 
 #define LOAD(name, typedef_name) \
@@ -44,8 +47,8 @@ typedef const WowtypeFrame *(*SessionSelect)(WowtypeSession *, size_t);
     if (!name) { fprintf(stderr, "missing export: %s\n", #name); close_library(lib); return 1; }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: wowtype-abi-smoke <wowtype_core.dll> <lexicon.tsv>\n");
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "usage: wowtype-abi-smoke <wowtype_core.dll> <lexicon.tsv> [words.lm]\n");
         return 2;
     }
     Library lib = open_library(argv[1]);
@@ -66,6 +69,9 @@ int main(int argc, char **argv) {
     LOAD(wowtype_session_key, SessionKey);
     LOAD(wowtype_session_candidate, SessionCandidate);
     LOAD(wowtype_session_select, SessionSelect);
+    LOAD(wowtype_session_view, SessionView);
+    LOAD(wowtype_session_candidate_total, CandidateTotal);
+    LOAD(wowtype_session_reset, SessionReset);
 
     int result = 1;
     WowtypeEngineHandle *engine = NULL;
@@ -78,7 +84,7 @@ int main(int argc, char **argv) {
         fputs("C header and DLL ABI major versions differ.\n", stderr);
         goto finish;
     }
-    engine = wowtype_engine_new(argv[2], NULL);
+    engine = wowtype_engine_new(argv[2], argc == 4 ? argv[3] : NULL);
     if (!engine) {
         fprintf(stderr, "Engine initialization failed: %s\n", wowtype_last_error());
         goto finish;
@@ -140,6 +146,51 @@ int main(int argc, char **argv) {
         goto finish;
     }
     puts("PASS: session composition and commit");
+    // Full lexicon has many candidates for "shi"; the demo fixture does not.
+    // Drive the real Rust page state, not a UI-side 9-row truncation.
+    if (argc == 4) {
+        wowtype_session_reset(session, 0);
+        for (const char *p = "shi"; *p; ++p) {
+            WowtypeKey typed = {0};
+            typed.size = (uint32_t)sizeof(typed);
+            typed.keysym = (unsigned char)*p;
+            frame = wowtype_session_key(session, &typed);
+            if (!frame || !frame->handled) {
+                fputs("Could not enter paging test input.\n", stderr);
+                goto finish;
+            }
+        }
+        if (wowtype_session_candidate_total(session) <= 9 || !frame->has_next) {
+            fputs("Full lexicon did not provide more than one candidate page.\n", stderr);
+            goto finish;
+        }
+        WowtypeSessionView initial = {0};
+        initial.size = (uint32_t)sizeof(initial);
+        if (wowtype_session_view(session, &initial) != 0 || initial.page != 0) {
+            fputs("Expected first page for paging smoke.\n", stderr);
+            goto finish;
+        }
+        WowtypeKey next = {0};
+        next.size = (uint32_t)sizeof(next);
+        next.keysym = 0xff56; // XKB PageDown
+        frame = wowtype_session_key(session, &next);
+        WowtypeSessionView paged = {0};
+        paged.size = (uint32_t)sizeof(paged);
+        if (!frame || !frame->handled || !frame->has_prev ||
+            wowtype_session_view(session, &paged) != 0 || paged.page != 1) {
+            fputs("PageDown did not advance Rust session page.\n", stderr);
+            goto finish;
+        }
+        WowtypeKey pick = {0};
+        pick.size = (uint32_t)sizeof(pick);
+        pick.keysym = '1';
+        frame = wowtype_session_key(session, &pick);
+        if (!frame || !frame->handled || !frame->commit || !*frame->commit) {
+            fputs("Selecting a candidate on the second page failed.\n", stderr);
+            goto finish;
+        }
+        puts("PASS: 9-per-page navigation, second-page candidate selection");
+    }
     result = 0;
 
 finish:
