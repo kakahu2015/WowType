@@ -1,0 +1,69 @@
+name: Windows TSF Prototype
+
+on:
+  push:
+    branches: ['windows/phase2**', 'windows/phase2/**']
+    paths:
+      - 'windows/tsf/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/windows-tsf.yml'
+      - 'core/**'
+      - 'voice/**'
+      - 'Cargo.*'
+  pull_request:
+    paths:
+      - 'windows/tsf/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/windows-tsf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-tsf:
+    name: TSF DLL, registration and rollback
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wowtype-win-tsf
+      - name: Compile Rust and native TSF COM DLL
+        shell: pwsh
+        run: ./scripts/windows/Build-Tsf.ps1
+      - name: Check TSF COM exports
+        shell: pwsh
+        run: |
+          $symbols = & dumpbin.exe /exports dist/windows/WowTypeTSF.dll
+          foreach ($symbol in @('DllGetClassObject','DllCanUnloadNow','DllRegisterServer','DllUnregisterServer')) {
+            if (!($symbols -match " $symbol$")) { throw "Export missing: $symbol" }
+          }
+      - name: Per-user COM and TSF registration / unregister smoke
+        shell: pwsh
+        run: |
+          $dll = (Resolve-Path 'dist/windows/WowTypeTSF.dll').Path
+          $key = 'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{9aebaf46-3231-4f65-836d-0972c2396181}'
+          try {
+            & "$env:WINDIR\System32\regsvr32.exe" /s $dll
+            if ($LASTEXITCODE -ne 0) { throw "regsvr32 failed ($LASTEXITCODE)" }
+            if (!(Test-Path $key)) { throw 'Missing HKCU COM CLSID registration' }
+          } finally {
+            & "$env:WINDIR\System32\regsvr32.exe" /u /s $dll
+            if ($LASTEXITCODE -ne 0) { throw "regsvr32 /u failed ($LASTEXITCODE)" }
+          }
+          if (Test-Path $key) { throw 'Unregister did not remove HKCU COM CLSID' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wowtype-windows11-tsf-UNSIGNED-PROTOTYPE
+          path: |
+            dist/windows/WowTypeTSF.dll
+            dist/windows/wowtype_core.dll
+            dist/windows/data/demo_lexicon.tsv
+          if-no-files-found: error
+          retention-days: 7
