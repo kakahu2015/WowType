@@ -81,3 +81,37 @@ Uninstall-Tsf.ps1 under the SAME Windows account; then install the new
 artifact's Install-Tsf.ps1. If the old DLL remains in use, close the
 applications or restart Windows before deleting/replacing it. Never
 overwrite an in-use TSF DLL and treat a failed unregister as a blocker.
+
+
+## Windows full-size offline lexicon (phase 2.1)
+
+Windows artifacts now include the **official upstream WowType v0.3.12**
+[rime-ice offline data release](https://github.com/Gloridust/WowType/releases/tag/v0.3.12)
+rather than only the 14-entry test fixture. The pinned archive is
+wowtype-data-rime-ice-2026.11.11.3.tar.gz, SHA-256
+ea07c3e8cf66cbf7d0ebc23ab95cc96384e6f3808fd0cdee1f87905322e51d7c.
+
+At BUILD time, scripts/windows/Get-OfflineLexicon.ps1 downloads and verifies the
+pinned archive, extracts the full lexicon.tsv, words.lm and source/license notices,
+and refuses packages with fewer than 500,000 data rows. The runtime Windows
+TSF DLL NEVER accesses the network. It requires both files in
+%LOCALAPPDATA%\Programs\WowTypeTSF\data and loads them through the Rust C ABI.
+No fallback to demo_lexicon.tsv is allowed in the Windows frontend.
+
+The full dictionary is based on [rime-ice](https://github.com/iDvel/rime-ice)
+and is licensed **GPL-3.0**. The words.lm language model has separate
+**CC BY-SA 4.0** attribution/requirements. The original upstream LICENSE and
+SOURCE.txt are included alongside the data. This does not relicense the
+WowType Rust/C++ source itself.
+
+The CI runs the native C ABI smoke against the actual released TSV AND words.lm
+before uploading the bundle; a 500k+ line count and ni hao / zhong guo dictionary
+records are also checked independently during packaging.
+
+### Upgrading an already installed demo-based TSF
+
+Switch to Microsoft Pinyin, close applications with WowType loaded, and run the
+OLD Uninstall-Tsf.ps1 under the same Windows account. Unzip a NEW full-lexicon
+artifact and run its Install-Tsf.ps1. If an open process prevents removal,
+restart Windows before trying to install the new DLL again. Installation of
+a package lacking the real lexicon or words.lm now explicitly fails.

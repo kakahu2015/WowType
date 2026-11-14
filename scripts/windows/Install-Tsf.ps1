@@ -16,8 +16,10 @@ $BundleDir = (Resolve-Path $BundleDir).Path
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
 $srcTip = Join-Path $BundleDir 'WowTypeTSF.dll'
 $srcCore = Join-Path $BundleDir 'wowtype_core.dll'
-$srcData = Join-Path $BundleDir 'data/demo_lexicon.tsv'
-foreach ($file in @($srcTip,$srcCore,$srcData)) {
+$srcDataDir = Join-Path $BundleDir 'data'
+$requiredData = @('lexicon.tsv', 'words.lm', 'LICENSE', 'SOURCE.txt')
+$requiredFiles = @($srcTip, $srcCore) + @($requiredData | ForEach-Object { Join-Path $srcDataDir $_ })
+foreach ($file in $requiredFiles) {
     if (!(Test-Path $file)) { throw "Missing package file: $file" }
 }
 if (Test-Path (Join-Path $destination 'WowTypeTSF.dll')) {
@@ -26,7 +28,14 @@ if (Test-Path (Join-Path $destination 'WowTypeTSF.dll')) {
 New-Item -ItemType Directory -Force (Join-Path $destination 'data') | Out-Null
 Copy-Item $srcTip (Join-Path $destination 'WowTypeTSF.dll') -Force
 Copy-Item $srcCore (Join-Path $destination 'wowtype_core.dll') -Force
-Copy-Item $srcData (Join-Path $destination 'data/demo_lexicon.tsv') -Force
+foreach ($name in $requiredData) {
+    Copy-Item (Join-Path $srcDataDir $name) (Join-Path (Join-Path $destination 'data') $name) -Force
+}
+foreach ($optional in @('VERSION', 'english.txt')) {
+    $path = Join-Path $srcDataDir $optional
+    if (Test-Path $path) { Copy-Item $path (Join-Path (Join-Path $destination 'data') $optional) -Force }
+}
+# No demo lexicon fallback: a successful Windows install must contain the full dictionary.
 $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
 $dll = Join-Path $destination 'WowTypeTSF.dll'
 $registration = Start-Process -FilePath $regsvr32 -ArgumentList @('/s', ('"' + $dll + '"')) -Wait -PassThru

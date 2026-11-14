@@ -44,6 +44,13 @@ jobs:
           foreach ($symbol in @('DllGetClassObject','DllCanUnloadNow','DllRegisterServer','DllUnregisterServer')) {
             if (!($symbols -match " $symbol$")) { throw "Export missing: $symbol" }
           }
+      - name: Full offline lexicon + language model core ABI regression
+        shell: pwsh
+        run: |
+          & cl.exe /nologo /W4 /TC /Icore/include windows/core/abi_smoke.c /Fe:dist/windows/full_lexicon_smoke.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot compile core lexicon smoke' }
+          & ./dist/windows/full_lexicon_smoke.exe ./dist/windows/wowtype_core.dll ./dist/windows/data/lexicon.tsv ./dist/windows/data/words.lm
+          if ($LASTEXITCODE -ne 0) { throw 'Full lexicon / language model smoke failed' }
       - name: Compile COM activation smoke
         shell: pwsh
         run: |
@@ -69,6 +76,12 @@ jobs:
             dist/windows/WowTypeTSF.dll
             dist/windows/wowtype_core.dll
             dist/windows/data/demo_lexicon.tsv
+            dist/windows/data/lexicon.tsv
+            dist/windows/data/words.lm
+            dist/windows/data/LICENSE
+            dist/windows/data/SOURCE.txt
+            dist/windows/data/VERSION
+            dist/windows/data/english.txt
             dist/windows/Install-Tsf.ps1
             dist/windows/Uninstall-Tsf.ps1
             dist/windows/WINDOWS-TSF.md

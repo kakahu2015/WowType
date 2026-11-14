@@ -1,6 +1,6 @@
 // WowType Windows TSF Phase 2 prototype. Windows 11 x64 only.
 // In-process COM text service; no global hooks, keyboard simulation or networking.
-// Requires wowtype_core.dll and data/demo_lexicon.tsv beside the installed module.
+// Requires wowtype_core.dll, data/lexicon.tsv and data/words.lm beside the installed module.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -121,11 +121,16 @@ public:
             version % 1000 < 6) { Close(); return false; }
 
         auto dictionary = path / L"data" / L"lexicon.tsv";
-        if (!fs::is_regular_file(dictionary)) dictionary = path / L"data" / L"demo_lexicon.tsv";
-        if (!fs::is_regular_file(dictionary)) { Close(); return false; }
+        auto language_model = path / L"data" / L"words.lm";
+        // A production-sized offline dictionary is mandatory, never silently fall back
+        // to the 14-entry demo lexicon shipped solely for core unit tests.
+        if (!fs::is_regular_file(dictionary) || !fs::is_regular_file(language_model)) {
+            Close(); return false;
+        }
         auto lexicon_utf8 = Utf8(dictionary.wstring());
-        if (lexicon_utf8.empty()) { Close(); return false; }
-        engine_ = new_engine_(lexicon_utf8.c_str(), nullptr);
+        auto model_utf8 = Utf8(language_model.wstring());
+        if (lexicon_utf8.empty() || model_utf8.empty()) { Close(); return false; }
+        engine_ = new_engine_(lexicon_utf8.c_str(), model_utf8.c_str());
         if (!engine_) { Close(); return false; }
         session_ = new_session_(engine_, nullptr);
         if (!session_) { Close(); return false; }
@@ -239,7 +244,7 @@ public:
             SIZE extent{};
             if (GetTextExtentPoint32W(dc, text_.data() + start,
                     static_cast<int>(end - start), &extent)) {
-                max_line = std::max(max_line, extent.cx);
+                max_line = std::max(max_line, static_cast<int>(extent.cx));
             }
             ++lines;
             start = end + 1;
@@ -250,7 +255,7 @@ public:
         DrawTextW(dc, text_.c_str(), -1, &layout,
                   DT_CALCRECT | DT_LEFT | DT_NOPREFIX | DT_WORDBREAK);
         const int estimated = lines * (tm.tmHeight + 2) + 14;
-        const int height = std::clamp(std::max(estimated, layout.bottom + 14), 45, 220);
+        const int height = std::clamp(std::max(estimated, static_cast<int>(layout.bottom) + 14), 45, 220);
         if (old) SelectObject(dc, old);
         ReleaseDC(window_, dc);
 

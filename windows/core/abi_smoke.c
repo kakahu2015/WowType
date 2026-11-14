@@ -44,8 +44,8 @@ typedef const WowtypeFrame *(*SessionSelect)(WowtypeSession *, size_t);
     if (!name) { fprintf(stderr, "missing export: %s\n", #name); close_library(lib); return 1; }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: wowtype-abi-smoke <wowtype_core.dll> <lexicon.tsv>\n");
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "usage: wowtype-abi-smoke <wowtype_core.dll> <lexicon.tsv> [words.lm]\n");
         return 2;
     }
     Library lib = open_library(argv[1]);
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         fputs("C header and DLL ABI major versions differ.\n", stderr);
         goto finish;
     }
-    engine = wowtype_engine_new(argv[2], NULL);
+    engine = wowtype_engine_new(argv[2], argc == 4 ? argv[3] : NULL);
     if (!engine) {
         fprintf(stderr, "Engine initialization failed: %s\n", wowtype_last_error());
         goto finish;
