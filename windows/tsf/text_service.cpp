@@ -234,6 +234,7 @@ class TextService final : public ITfTextInputProcessorEx,
     ComPtr<ITfKeystrokeMgr> keystrokes_;
     ComPtr<ITfSource> thread_source_;
     ComPtr<ITfComposition> composition_;
+    ComPtr<ITfContext> composition_context_;
     DWORD source_cookie_ = TF_INVALID_COOKIE;
     TfClientId client_id_ = TF_CLIENTID_NULL;
     CoreSession core_;
@@ -277,6 +278,8 @@ class TextService final : public ITfTextInputProcessorEx,
     }
 
     HRESULT ApplyEdit(ITfContext *context, TfEditCookie cookie, const Snapshot &frame) {
+        // Never apply a composition range belonging to a different document.
+        if (composition_ && composition_context_.Get() != context) CancelComposition();
         if (frame.preedit.empty() && frame.commit.empty() && !composition_) return S_OK;
         ComPtr<ITfInsertAtSelection> insert;
         HRESULT hr = context->QueryInterface(IID_PPV_ARGS(insert.GetAddressOf()));
@@ -294,6 +297,7 @@ class TextService final : public ITfTextInputProcessorEx,
                                             static_cast<ITfCompositionSink *>(this),
                                             composition_.ReleaseAndGetAddressOf());
             if (FAILED(hr) || !composition_) return FAILED(hr) ? hr : E_FAIL;
+            composition_context_ = context;
         }
 
         if (composition_) {
@@ -306,6 +310,7 @@ class TextService final : public ITfTextInputProcessorEx,
             if (frame.preedit.empty() || !frame.commit.empty()) {
                 auto finished = composition_;
                 composition_.Reset();
+                composition_context_.Reset();
                 return finished->EndComposition(cookie);
             }
             ComPtr<ITfRange> cursor;
@@ -354,6 +359,51 @@ class TextService final : public ITfTextInputProcessorEx,
         }
     };
 
+    // A focus change must not retain the old application's composition range.
+    // Schedule cancellation in the old document's own TSF write edit session.
+    class CancelEdit final : public ITfEditSession {
+        std::atomic<ULONG> refs_{1};
+        ComPtr<ITfComposition> old_;
+    public:
+        explicit CancelEdit(ITfComposition *old) : old_(old) {}
+        STDMETHODIMP QueryInterface(REFIID id, void **out) override {
+            if (!out) return E_POINTER;
+            *out = nullptr;
+            if (IsEqualIID(id, IID_IUnknown) || IsEqualIID(id, IID_ITfEditSession))
+                *out = static_cast<ITfEditSession *>(this);
+            if (!*out) return E_NOINTERFACE;
+            AddRef(); return S_OK;
+        }
+        STDMETHODIMP_(ULONG) AddRef() override { return ++refs_; }
+        STDMETHODIMP_(ULONG) Release() override {
+            ULONG n = --refs_; if (!n) delete this; return n;
+        }
+        STDMETHODIMP DoEditSession(TfEditCookie ec) override {
+            ComPtr<ITfRange> range;
+            if (SUCCEEDED(old_->GetRange(range.GetAddressOf())))
+                range->SetText(ec, 0, L"", 0);
+            return old_->EndComposition(ec);
+        }
+    };
+
+    void CancelComposition() {
+        if (!composition_) return;
+        auto old = composition_;
+        auto context = composition_context_;
+        // Detach immediately so subsequent keys cannot reach the old range.
+        composition_.Reset();
+        composition_context_.Reset();
+        if (context && client_id_ != TF_CLIENTID_NULL) {
+            auto edit = new (std::nothrow) CancelEdit(old.Get());
+            if (edit) {
+                HRESULT session_hr = E_FAIL;
+                context->RequestEditSession(client_id_, edit,
+                                            TF_ES_ASYNC | TF_ES_READWRITE, &session_hr);
+                edit->Release();
+            }
+        }
+    }
+
 public:
     TextService() { ++g_objects; }
     ~TextService() { Deactivate(); --g_objects; }
@@ -400,6 +450,7 @@ public:
     }
     STDMETHODIMP Deactivate() override {
         popup_.Hide();
+        CancelComposition();
         if (thread_source_ && source_cookie_ != TF_INVALID_COOKIE)
             thread_source_->UnadviseSink(source_cookie_);
         source_cookie_ = TF_INVALID_COOKIE;
@@ -409,12 +460,13 @@ public:
         keystrokes_.Reset();
         thread_mgr_.Reset();
         composition_.Reset();
+        composition_context_.Reset();
         core_.Reset();
         client_id_ = TF_CLIENTID_NULL;
         return S_OK;
     }
     STDMETHODIMP OnSetFocus(BOOL foreground) override {
-        if (!foreground) { core_.Reset(); popup_.Hide(); }
+        if (!foreground) { CancelComposition(); core_.Reset(); popup_.Hide(); }
         return S_OK;
     }
     STDMETHODIMP OnTestKeyDown(ITfContext *, WPARAM key, LPARAM, BOOL *eaten) override {
@@ -447,6 +499,7 @@ public:
                                                   TF_ES_SYNC | TF_ES_READWRITE, &session_hr);
         edit->Release();
         if (FAILED(hr) || FAILED(session_hr)) {
+            CancelComposition();
             core_.Reset();
             popup_.Hide();
             return S_OK; // Do not swallow user keys if no writable edit session exists.
@@ -459,20 +512,24 @@ public:
         if (!eaten) return E_POINTER;
         *eaten = FALSE; return S_OK;
     }
-    STDMETHODIMP OnCompositionTerminated(TfEditCookie, ITfComposition *) override {
-        composition_.Reset();
-        core_.Reset();
-        popup_.Hide();
+    STDMETHODIMP OnCompositionTerminated(TfEditCookie, ITfComposition *terminated) override {
+        // A previous document may terminate after focus moved to a new context.
+        if (composition_.Get() == terminated) {
+            composition_.Reset();
+            composition_context_.Reset();
+            core_.Reset();
+            popup_.Hide();
+        }
         return S_OK;
     }
     STDMETHODIMP OnInitDocumentMgr(ITfDocumentMgr *) override { return S_OK; }
     STDMETHODIMP OnUninitDocumentMgr(ITfDocumentMgr *) override { return S_OK; }
     STDMETHODIMP OnSetFocus(ITfDocumentMgr *, ITfDocumentMgr *) override {
-        core_.Reset(); popup_.Hide(); return S_OK;
+        CancelComposition(); core_.Reset(); popup_.Hide(); return S_OK;
     }
     STDMETHODIMP OnPushContext(ITfContext *) override { return S_OK; }
     STDMETHODIMP OnPopContext(ITfContext *) override {
-        core_.Reset(); popup_.Hide(); return S_OK;
+        CancelComposition(); core_.Reset(); popup_.Hide(); return S_OK;
     }
 };
 
