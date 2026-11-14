@@ -93,14 +93,33 @@ mod tests {
     fn clipboard_sink_feeds_copy_command() {
         let path = std::env::temp_dir().join(format!("wowtype_clip_{}.txt", std::process::id()));
         let _ = std::fs::remove_file(&path);
+        // For Windows use PowerShell to copy raw UTF-8 stdin bytes to disk.
+        // This avoids Unix shell path assumptions and verifies the pipe is closed.
+        #[cfg(windows)]
+        let copy_cmd = vec![
+            "powershell.exe".into(),
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            format!(
+                "$inputStream=[Console]::OpenStandardInput(); $outputStream=[IO.File]::Create('{}'); try {{ $inputStream.CopyTo($outputStream) }} finally {{ $outputStream.Dispose() }}",
+                path.display().to_string().replace('\'', "''")
+            ),
+        ];
+        #[cfg(not(windows))]
+        let copy_cmd = vec![
+            "sh".into(),
+            "-c".into(),
+            format!("cat > '{}'", path.display().to_string().replace('\'', "'\\''")),
+        ];
+        #[cfg(windows)]
+        let noop = vec!["cmd.exe".into(), "/C".into(), "exit 0".into()];
+        #[cfg(not(windows))]
+        let noop = vec!["true".into()];
         let mut sink = ClipboardSink {
-            copy_cmd: vec![
-                "sh".into(),
-                "-c".into(),
-                format!("cat > {}", path.display()),
-            ],
-            paste_cmd: vec!["true".into()],
-            backspace_cmd: vec!["true".into()],
+            copy_cmd,
+            paste_cmd: noop.clone(),
+            backspace_cmd: noop,
         };
         sink.insert("你好");
         let written = std::fs::read_to_string(&path).expect("应当写入文件");
@@ -172,8 +191,10 @@ impl TextSink for ClipboardSink {
                 .stdin(std::process::Stdio::piped())
                 .spawn();
             if let Ok(mut child) = child {
-                if let Some(stdin) = child.stdin.as_mut() {
-                    let _ = std::io::Write::write_all(stdin, text.as_bytes());
+                // Close the stdin pipe before wait(); readers such as cat or
+                // PowerShell's CopyTo otherwise block forever waiting for EOF.
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(text.as_bytes());
                 }
                 let _ = child.wait();
             }

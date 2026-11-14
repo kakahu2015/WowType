@@ -1,0 +1,53 @@
+name: Windows Core Validation
+
+on:
+  push:
+    branches: [main, 'windows/**']
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'core/**'
+      - 'voice/**'
+      - 'voice-daemon/**'
+      - 'windows/**'
+      - 'scripts/windows/**'
+      - '.github/workflows/windows-core.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-core:
+    name: Native Rust / C ABI / x64 MSVC
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wowtype-windows-core-msvc
+      - name: Run native Rust and C ABI validation
+        shell: pwsh
+        run: ./scripts/windows/Test-Core.ps1
+      - name: Verify artifacts and print hashes
+        shell: pwsh
+        run: |
+          if (!(Test-Path target/release/wowtype_core.dll)) { throw 'Missing core DLL' }
+          if (!(Test-Path target/release/wowtype-abi-smoke.exe)) { throw 'Missing smoke executable' }
+          Get-FileHash -Algorithm SHA256 target/release/wowtype_core.dll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wowtype-core-win11-target-x64-msvc-NOT-IME
+          path: |
+            target/release/wowtype_core.dll
+            target/release/wowtype-abi-smoke.exe
+          if-no-files-found: error
+          retention-days: 7

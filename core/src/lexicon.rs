@@ -54,6 +54,11 @@ fn cache_path(path: &Path) -> std::path::PathBuf {
 /// 再放 XDG 缓存目录。
 fn cache_paths(path: &Path) -> Vec<std::path::PathBuf> {
     let mut out = vec![cache_path(path)];
+    #[cfg(windows)]
+    let base = std::env::var_os("LOCALAPPDATA")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from);
+    #[cfg(not(windows))]
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| {

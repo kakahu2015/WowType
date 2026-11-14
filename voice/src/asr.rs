@@ -286,9 +286,22 @@ mod tests {
 
     #[test]
     fn wav_placeholder_is_substituted() {
-        // 识别器需要 --wav=路径 这种形式时，用占位符指定位置
-        let mut ch =
-            ProcessChannel::from_command_line("probe", r#"sh -c "test -f {wav} && echo ok""#);
+        // Test placeholder replacement using native OS commands. The path may contain spaces.
+        #[cfg(windows)]
+        let command = vec![
+            "powershell.exe".into(),
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            "if (Test-Path -LiteralPath '{wav}') { Write-Output 'ok' }".into(),
+        ];
+        #[cfg(not(windows))]
+        let command = vec![
+            "sh".into(),
+            "-c".into(),
+            "test -f \"{wav}\" && echo ok".into(),
+        ];
+        let mut ch = ProcessChannel::new("probe", command);
         ch.feed(&[1i16; 160]);
         assert_eq!(ch.finish().as_deref(), Some("ok"));
     }

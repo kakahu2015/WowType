@@ -1384,9 +1384,54 @@ pub fn system_time() -> Option<LocalTime> {
     })
 }
 
-#[cfg(not(unix))]
+// SYSTEMTIME comprises eight 16-bit WORD values in the Win32 ABI.
+#[cfg(windows)]
+pub fn system_time() -> Option<LocalTime> {
+    #[repr(C)]
+    struct SystemTime {
+        year: u16,
+        month: u16,
+        weekday: u16,
+        day: u16,
+        hour: u16,
+        minute: u16,
+        second: u16,
+        milliseconds: u16,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLocalTime(system_time: *mut SystemTime);
+    }
+    let mut now = std::mem::MaybeUninit::<SystemTime>::uninit();
+    // SAFETY: Win32 GetLocalTime fully writes the caller-provided SYSTEMTIME.
+    let now = unsafe {
+        GetLocalTime(now.as_mut_ptr());
+        now.assume_init()
+    };
+    Some(LocalTime {
+        year: i32::from(now.year),
+        month: u32::from(now.month),
+        day: u32::from(now.day),
+        hour: u32::from(now.hour),
+        minute: u32::from(now.minute),
+        second: u32::from(now.second),
+        weekday: u32::from(now.weekday),
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn system_time() -> Option<LocalTime> {
     None
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn windows_local_time_sanity() {
+    let t = system_time().expect("GetLocalTime should succeed");
+    assert!((2000..=9999).contains(&t.year));
+    assert!((1..=12).contains(&t.month));
+    assert!((1..=31).contains(&t.day));
+    assert!(t.hour < 24 && t.minute < 60 && t.second < 60 && t.weekday < 7);
 }
 
 #[cfg(test)]

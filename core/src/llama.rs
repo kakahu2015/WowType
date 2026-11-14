@@ -34,7 +34,19 @@ pub struct LocalConfig {
 
 /// 把开头的 `~/` 换成家目录（设置里常这么写）。
 pub fn expand_home(path: &str) -> PathBuf {
-    match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
+    let suffix = path.strip_prefix("~/").or_else(|| {
+        if cfg!(windows) {
+            path.strip_prefix("~\\")
+        } else {
+            None
+        }
+    });
+    let home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+    } else {
+        std::env::var_os("HOME")
+    };
+    match (suffix, home) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
         _ => PathBuf::from(path),
     }
@@ -53,9 +65,8 @@ impl LocalConfig {
         } else {
             self.server.trim()
         };
-        if name.contains('/') {
-            let path = PathBuf::from(name);
-            return is_executable(&path).then_some(path);
+        if name.contains('/') || (cfg!(windows) && name.contains('\\')) {
+            return executable_candidate(PathBuf::from(name));
         }
         find_server(name, std::env::var_os("PATH"), downloaded_server())
     }
@@ -69,27 +80,56 @@ fn find_server(
 ) -> Option<PathBuf> {
     path.and_then(|path| {
         std::env::split_paths(&path)
-            .map(|dir| dir.join(name))
-            .find(|p| is_executable(p))
+            .find_map(|dir| executable_candidate(dir.join(name)))
     })
-    .or_else(|| downloaded.filter(|p| is_executable(p)))
+    .or_else(|| downloaded.and_then(executable_candidate))
 }
 
 /// 设置界面「下载」放 llama-server 的地方：`$XDG_DATA_HOME/wowtype/llama/llama-server`
 /// （llama.cpp 官方发布的二进制，和它的动态库在同一个目录）。
 pub fn downloaded_server() -> Option<PathBuf> {
-    let data = match std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
-        Some(dir) => PathBuf::from(dir),
-        None => PathBuf::from(std::env::var_os("HOME")?).join(".local/share"),
-    };
-    Some(data.join("wowtype/llama/llama-server"))
+    #[cfg(windows)]
+    {
+        return std::env::var_os("LOCALAPPDATA")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .map(|dir| dir.join("WowType/llama/llama-server.exe"));
+    }
+    #[cfg(not(windows))]
+    {
+        let data = match std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
+            Some(dir) => PathBuf::from(dir),
+            None => PathBuf::from(std::env::var_os("HOME")?).join(".local/share"),
+        };
+        Some(data.join("wowtype/llama/llama-server"))
+    }
 }
 
+fn executable_candidate(path: PathBuf) -> Option<PathBuf> {
+    if is_executable(&path) {
+        return Some(path);
+    }
+    if cfg!(windows) && path.extension().is_none() {
+        let exe = path.with_extension("exe");
+        return is_executable(&exe).then_some(exe);
+    }
+    None
+}
+
+#[cfg(unix)]
 fn is_executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     path.metadata()
         .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn is_executable(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
 }
 
 struct Running {
@@ -337,8 +377,8 @@ fn spawn_watchdog(state: Arc<(Mutex<State>, Condvar)>, generation: u64, idle: Du
         .ok();
 }
 
-/// 测试用的假 llama-server（translate 的测试也用）。
-#[cfg(test)]
+/// POSIX-only fake-server uses shebang scripts and chmod; Windows integration tests are separate.
+#[cfg(all(test, unix))]
 pub(crate) mod test_support {
     use std::path::{Path, PathBuf};
 
@@ -377,7 +417,7 @@ http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
