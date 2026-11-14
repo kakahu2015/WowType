@@ -79,7 +79,8 @@ void CandidateWindow::Show(const std::vector<std::wstring> &items, int cursor,
     const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     if (origin.x + width > screenWidth) origin.x = std::max(0, screenWidth - width);
-    if (origin.y + height > screenHeight) origin.y = std::max(0, origin.y - height - 24);
+    if (origin.y + height > screenHeight)
+        origin.y = std::max<LONG>(0, origin.y - height - 24);
 
     SetWindowPos(hwnd_, HWND_TOPMOST, origin.x, origin.y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);

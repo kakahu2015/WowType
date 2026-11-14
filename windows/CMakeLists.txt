@@ -12,7 +12,8 @@ add_library(wowtype_text_service SHARED
     src/CandidateWindow.cpp
     src/DllMain.cpp
     src/Registration.cpp
-    src/TextService.cpp)
+    src/TextService.cpp
+    src/WowTypeTextService.def)
 target_compile_features(wowtype_text_service PRIVATE cxx_std_20)
 target_compile_definitions(wowtype_text_service PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(wowtype_text_service PRIVATE

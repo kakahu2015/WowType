@@ -68,7 +68,7 @@ HRESULT RegisterTextService() {
     }
 
     Microsoft::WRL::ComPtr<ITfInputProcessorProfileMgr> profiles;
-    hr = CoCreateInstance(CLSID_TF_InputProcessorProfileMgr, nullptr,
+    hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr,
                           CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&profiles));
     if (SUCCEEDED(hr)) {
         hr = profiles->RegisterProfile(CLSID_WowTypeTextService, kProfileLanguage,
@@ -99,7 +99,7 @@ HRESULT UnregisterTextService() {
     HRESULT hr = WithComInitialized(uninitialize);
     if (SUCCEEDED(hr)) {
         Microsoft::WRL::ComPtr<ITfInputProcessorProfileMgr> profiles;
-        if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfileMgr, nullptr,
+        if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr,
                                        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&profiles)))) {
             profiles->UnregisterProfile(CLSID_WowTypeTextService, kProfileLanguage,
                                         GUID_WowTypeProfile, 0);

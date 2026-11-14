@@ -69,8 +69,7 @@ HRESULT CreateTextService(REFIID riid, void **object) {
     return hr;
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(
-    REFCLSID clsid, REFIID riid, void **object) {
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID riid, LPVOID *object) {
     if (!IsEqualCLSID(clsid, CLSID_WowTypeTextService)) return CLASS_E_CLASSNOTAVAILABLE;
     if (!object) return E_INVALIDARG;
     *object = nullptr;
@@ -81,15 +80,15 @@ extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(
     return hr;
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow() {
+STDAPI DllCanUnloadNow(void) {
     return g_wowtypeObjects.load() == 0 && g_wowtypeLocks.load() == 0 ? S_OK : S_FALSE;
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllRegisterServer() {
+STDAPI DllRegisterServer(void) {
     return RegisterTextService();
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall DllUnregisterServer() {
+STDAPI DllUnregisterServer(void) {
     return UnregisterTextService();
 }
 #endif

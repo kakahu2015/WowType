@@ -1,0 +1,6 @@
+LIBRARY WowTypeTextService
+EXPORTS
+    DllCanUnloadNow
+    DllGetClassObject
+    DllRegisterServer
+    DllUnregisterServer
