@@ -1,0 +1,6 @@
+LIBRARY WowTypeTSF
+EXPORTS
+    DllGetClassObject
+    DllCanUnloadNow
+    DllRegisterServer
+    DllUnregisterServer

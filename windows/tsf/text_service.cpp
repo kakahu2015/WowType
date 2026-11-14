@@ -639,7 +639,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID) {
     }
     return TRUE;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID id, void **out) {
+extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID clsid, REFIID id, void **out) {
     if (!out) return E_POINTER;
     *out = nullptr;
     if (!IsEqualCLSID(clsid, CLSID_WowTypeTsf)) return CLASS_E_CLASSNOTAVAILABLE;
@@ -649,10 +649,10 @@ extern "C" __declspec(dllexport) HRESULT __stdcall DllGetClassObject(REFCLSID cl
     factory->Release();
     return hr;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllCanUnloadNow() {
+extern "C" HRESULT __stdcall DllCanUnloadNow() {
     return (g_objects.load() == 0 && g_locks.load() == 0) ? S_OK : S_FALSE;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllRegisterServer() {
+extern "C" HRESULT __stdcall DllRegisterServer() {
     HRESULT hr = WriteComRegistration();
     if (FAILED(hr)) return hr;
     HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -672,7 +672,7 @@ extern "C" __declspec(dllexport) HRESULT __stdcall DllRegisterServer() {
     }
     return hr;
 }
-extern "C" __declspec(dllexport) HRESULT __stdcall DllUnregisterServer() {
+extern "C" HRESULT __stdcall DllUnregisterServer() {
     HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (SUCCEEDED(initialized) || initialized == RPC_E_CHANGED_MODE) {
         UnregisterProfile();
