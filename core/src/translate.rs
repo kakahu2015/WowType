@@ -823,6 +823,8 @@ fn run_job(
 mod tests {
     use super::*;
 
+    // The fixture launches a Unix shebang server. Windows requires a native test double.
+    #[cfg(unix)]
     #[test]
     fn local_model_end_to_end() {
         if !std::process::Command::new("python3")
