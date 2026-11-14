@@ -26,7 +26,7 @@ Checked cl.exe @(
     '/DUNICODE','/D_UNICODE',
     '/Icore\include','windows\tsf\text_service.cpp',
     '/link',"/OUT:$target","/IMPLIB:$(Join-Path $destination 'WowTypeTSF.lib')",
-    'ole32.lib','msctf.lib','uuid.lib','advapi32.lib','user32.lib','gdi32.lib'
+    'ole32.lib','uuid.lib','advapi32.lib','user32.lib','gdi32.lib'
 )
 Copy-Item 'target/release/wowtype_core.dll' (Join-Path $destination 'wowtype_core.dll') -Force
 Copy-Item 'core/data/demo_lexicon.tsv' (Join-Path $destination 'data/demo_lexicon.tsv') -Force

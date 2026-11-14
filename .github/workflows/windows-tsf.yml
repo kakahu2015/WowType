@@ -47,7 +47,7 @@ jobs:
       - name: Compile COM activation smoke
         shell: pwsh
         run: |
-          & cl.exe /nologo /W4 /EHsc /std:c++20 /utf-8 windows/tsf/com_smoke.cpp /Fe:dist/windows/com_smoke.exe /link ole32.lib msctf.lib uuid.lib
+          & cl.exe /nologo /W4 /EHsc /std:c++20 /utf-8 windows/tsf/com_smoke.cpp /Fe:dist/windows/com_smoke.exe /link ole32.lib uuid.lib
           if ($LASTEXITCODE -ne 0) { throw 'Cannot compile native COM activation smoke' }
       - name: Per-user COM and TSF registration / unregister smoke
         shell: pwsh
