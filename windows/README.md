@@ -19,7 +19,7 @@ To remove it, switch to another input method, then run `uninstall.ps1` from the 
 
 ## Typing and translation
 
-- Type pinyin and choose candidates with number keys, arrows, or the candidate window.
+- Type pinyin and choose candidates with number keys, arrows, or the candidate window. When there is more than one page, click **上一页 / 下一页** or press **PgUp / PgDn**; `-` / `=` also page backward / forward.
 - Press **Shift** briefly to cycle Chinese, English, and translation modes. Translation mode appears when an endpoint is configured and enabled.
 - Open **WowType Settings** from the Start menu to enable translation and enter an OpenAI-compatible API URL, model, target language, and optional API key. The key is stored separately under `%APPDATA%\WowType` with a current-user-only file ACL.
 - In translation mode, type the source text, wait for the automatic translation, then press **Enter** or **Space** to insert the translation. **Shift+Enter** inserts the source; **Esc** clears it.

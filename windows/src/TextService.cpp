@@ -446,6 +446,7 @@ STDMETHODIMP TextService::Activate(ITfThreadMgr *threadManager, TfClientId clien
         return E_FAIL;
     }
     candidateWindow_.SetSelectHandler([this](size_t index) { SelectCandidate(index); });
+    candidateWindow_.SetPageHandler([this](int direction) { ChangeCandidatePage(direction); });
     timerWindow_ = CreateTimerWindow(g_wowtypeModule, this);
     return S_OK;
 }
@@ -703,13 +704,23 @@ void TextService::UpdateCandidateWindow(const WowtypeFrame *frame, const RECT *a
     items.reserve(frame->cand_count);
     for (size_t i = 0; i < frame->cand_count; ++i)
         items.push_back(FromUtf8(wowtype_session_candidate(session_, i)));
-    candidateWindow_.Show(items, frame->cand_cursor, anchor, aux, status);
+    candidateWindow_.Show(items, frame->cand_cursor, anchor, aux, status,
+                          frame->has_prev != 0, frame->has_next != 0);
 }
 
 HRESULT TextService::SelectCandidate(size_t index) {
     if (!session_ || !activeContext_) return E_UNEXPECTED;
     const WowtypeFrame *frame = wowtype_session_select(session_, index);
     return frame ? ApplyFrame(frame) : E_FAIL;
+}
+
+void TextService::ChangeCandidatePage(int direction) {
+    if (!session_ || !activeContext_ || direction == 0) return;
+    WowtypeKey key{};
+    key.size = sizeof(key);
+    key.keysym = direction < 0 ? 0xff55 : 0xff56;
+    const WowtypeFrame *frame = wowtype_session_key(session_, &key);
+    if (frame && frame->handled) ApplyFrame(frame);
 }
 
 void TextService::SaveLearning() {

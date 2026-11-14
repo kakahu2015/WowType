@@ -55,6 +55,7 @@ public:
     STDMETHODIMP OnPopContext(ITfContext *context) override;
 
     HRESULT SelectCandidate(size_t index);
+    void ChangeCandidatePage(int direction);
     void OnTimer();
 
 private:

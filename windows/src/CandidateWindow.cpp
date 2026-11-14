@@ -42,10 +42,13 @@ bool CandidateWindow::Create(HINSTANCE instance) {
 
 void CandidateWindow::Show(const std::vector<std::wstring> &items, int cursor,
                            const RECT *anchor, const std::wstring &aux,
-                           const std::wstring &status) {
+                           const std::wstring &status, bool hasPreviousPage,
+                           bool hasNextPage) {
     if (!hwnd_) return;
     items_ = items;
     cursor_ = cursor;
+    hasPreviousPage_ = hasPreviousPage;
+    hasNextPage_ = hasNextPage;
     aux_ = aux;
     status_ = status;
     if (items_.empty() && aux_.empty() && status_.empty()) {
@@ -54,9 +57,11 @@ void CandidateWindow::Show(const std::vector<std::wstring> &items, int cursor,
     }
 
     const int columns = std::clamp(static_cast<int>(items_.size()), 1, kMaxColumns);
-    const int width = std::max(260, columns * kCellWidth + kPadding * 2);
+    const int minimumWidth = (hasPreviousPage_ || hasNextPage_) ? 320 : 260;
+    const int width = std::max(minimumWidth, columns * kCellWidth + kPadding * 2);
     const int rows = items_.empty() ? 0 : 1;
-    const int extraRows = (!aux_.empty() ? 1 : 0) + (!status_.empty() ? 1 : 0);
+    const int extraRows = ((hasPreviousPage_ || hasNextPage_) ? 1 : 0) +
+                          (!aux_.empty() ? 1 : 0) + (!status_.empty() ? 1 : 0);
     const int height = kPadding * 2 + (rows + extraRows) * kRowHeight;
 
     POINT origin{};
@@ -111,6 +116,20 @@ LRESULT CandidateWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lPara
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE;
     case WM_LBUTTONUP: {
+        const int y = GET_Y_LPARAM(lParam) - kPadding;
+        const int candidateBottom = items_.empty() ? 0 : kRowHeight;
+        if ((hasPreviousPage_ || hasNextPage_) && y >= candidateBottom &&
+            y < candidateBottom + kRowHeight) {
+            const int x = GET_X_LPARAM(lParam);
+            RECT client{};
+            GetClientRect(hwnd_, &client);
+            if (x < client.right / 2 && hasPreviousPage_ && pageHandler_)
+                pageHandler_(-1);
+            else if (x >= client.right / 2 && hasNextPage_ && pageHandler_)
+                pageHandler_(1);
+            return 0;
+        }
+        if (y < 0 || y >= candidateBottom || items_.empty()) return 0;
         const int x = GET_X_LPARAM(lParam) - kPadding;
         const size_t index = x < 0 ? items_.size()
                                    : static_cast<size_t>(x / kCellWidth);
@@ -159,6 +178,24 @@ void CandidateWindow::Paint() {
     }
 
     LONG y = kPadding + (items_.empty() ? 0 : kRowHeight);
+    if (hasPreviousPage_ || hasNextPage_) {
+        const LONG middle = client.right / 2;
+        RECT previous{ kPadding, y, middle - 4, y + kRowHeight };
+        RECT next{ middle + 4, y, client.right - kPadding, y + kRowHeight };
+        FillRect(dc, &previous, GetSysColorBrush(hasPreviousPage_ ? COLOR_BTNFACE : COLOR_WINDOW));
+        FillRect(dc, &next, GetSysColorBrush(hasNextPage_ ? COLOR_BTNFACE : COLOR_WINDOW));
+        if (hasPreviousPage_) DrawEdge(dc, &previous, EDGE_RAISED, BF_RECT);
+        if (hasNextPage_) DrawEdge(dc, &next, EDGE_RAISED, BF_RECT);
+        SetTextColor(dc, GetSysColor(hasPreviousPage_ ? COLOR_BTNTEXT : COLOR_GRAYTEXT));
+        const wchar_t previousLabel[] = L"← 上一页  PgUp";
+        DrawTextW(dc, previousLabel, -1, &previous,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SetTextColor(dc, GetSysColor(hasNextPage_ ? COLOR_BTNTEXT : COLOR_GRAYTEXT));
+        const wchar_t nextLabel[] = L"PgDn  下一页 →";
+        DrawTextW(dc, nextLabel, -1, &next,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        y += kRowHeight;
+    }
     SetTextColor(dc, RGB(100, 100, 100));
     if (!aux_.empty()) {
         RECT line{ kPadding, y, client.right - kPadding, y + kRowHeight };
