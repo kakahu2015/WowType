@@ -1,6 +1,6 @@
 # Per-user development installation. Only run on a Windows 11 x64 TEST MACHINE.
 # Requires TSF DLL, Rust core DLL and data directory produced by Build-Tsf.ps1.
-param([string]$BundleDir = '')
+param([string]$BundleDir = '', [switch]$DisableAutoUpdate)
 $ErrorActionPreference = 'Stop'
 if (!$BundleDir) {
     if (Test-Path (Join-Path $PSScriptRoot 'WowTypeTSF.dll')) {
@@ -16,9 +16,12 @@ $BundleDir = (Resolve-Path $BundleDir).Path
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
 $srcTip = Join-Path $BundleDir 'WowTypeTSF.dll'
 $srcCore = Join-Path $BundleDir 'wowtype_core.dll'
+$srcSmoke = Join-Path $BundleDir 'full_lexicon_smoke.exe'
+$srcUpdater = Join-Path $BundleDir 'Update-Lexicon.ps1'
+$srcManage = Join-Path $BundleDir 'Manage-LexiconUpdate.ps1'
 $srcDataDir = Join-Path $BundleDir 'data'
 $requiredData = @('lexicon.tsv', 'words.lm', 'LICENSE', 'SOURCE.txt')
-$requiredFiles = @($srcTip, $srcCore) + @($requiredData | ForEach-Object { Join-Path $srcDataDir $_ })
+$requiredFiles = @($srcTip, $srcCore, $srcSmoke, $srcUpdater, $srcManage) + @($requiredData | ForEach-Object { Join-Path $srcDataDir $_ })
 foreach ($file in $requiredFiles) {
     if (!(Test-Path $file)) { throw "Missing package file: $file" }
 }
@@ -28,6 +31,9 @@ if (Test-Path (Join-Path $destination 'WowTypeTSF.dll')) {
 New-Item -ItemType Directory -Force (Join-Path $destination 'data') | Out-Null
 Copy-Item $srcTip (Join-Path $destination 'WowTypeTSF.dll') -Force
 Copy-Item $srcCore (Join-Path $destination 'wowtype_core.dll') -Force
+Copy-Item $srcSmoke (Join-Path $destination 'full_lexicon_smoke.exe') -Force
+Copy-Item $srcUpdater (Join-Path $destination 'Update-Lexicon.ps1') -Force
+Copy-Item $srcManage (Join-Path $destination 'Manage-LexiconUpdate.ps1') -Force
 foreach ($name in $requiredData) {
     Copy-Item (Join-Path $srcDataDir $name) (Join-Path (Join-Path $destination 'data') $name) -Force
 }
@@ -44,5 +50,14 @@ $clsid = '9aebaf46-3231-4f65-836d-0972c2396181'
 $reg = "Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{$clsid}"
 if (!(Test-Path $reg)) { throw "COM registration missing: $reg" }
 Write-Host "Registered per-user prototype: $destination"
+if (!$DisableAutoUpdate) {
+    try {
+        & (Join-Path $destination 'Manage-LexiconUpdate.ps1') -InstallDir $destination
+    } catch {
+        Write-Warning ("Automatic dictionary checks could not be enabled; IME still works offline: " + $_.Exception.Message)
+    }
+} else {
+    Write-Host 'Weekly dictionary updates disabled by installation option.'
+}
 Write-Host 'Select WowType Chinese (prototype) in Windows Settings > Time & language > Language & region.'
 Write-Warning 'This is not a production IME. Do not use for sensitive input; uninstall when testing completes.'

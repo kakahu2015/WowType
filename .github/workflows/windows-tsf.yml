@@ -51,6 +51,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot compile core lexicon smoke' }
           & ./dist/windows/full_lexicon_smoke.exe ./dist/windows/wowtype_core.dll ./dist/windows/data/lexicon.tsv ./dist/windows/data/words.lm
           if ($LASTEXITCODE -ne 0) { throw 'Full lexicon / language model smoke failed' }
+      - name: Automatic updater + paging regression
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
+          # Registration step below is deliberately kept independent.
+          if (!(Test-Path 'dist/windows/Update-Lexicon.ps1')) { throw 'Missing updater in artifact directory' }
       - name: Compile COM activation smoke
         shell: pwsh
         run: |
@@ -65,10 +71,26 @@ jobs:
             if (!(Test-Path $key)) { throw 'Missing HKCU COM CLSID registration' }
             & ./dist/windows/com_smoke.exe
             if ($LASTEXITCODE -ne 0) { throw 'COM class activation failed' }
+            $task = Get-ScheduledTask -TaskName 'WowTypeTSF-LexiconUpdate' -ErrorAction Stop
+            if (!$task) { throw 'Auto-update scheduled task not registered' }
+            $installed = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
+            & ./dist/windows/Update-Lexicon.ps1 -InstallDir $installed -CheckOnly
+            if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Updater version check failed' }
+            # Exercise the transactional update with an actual upstream tarball.
+            & ./dist/windows/Update-Lexicon.ps1 -InstallDir $installed -Force
+            $active = Join-Path $installed 'data/active.txt'
+            if (!(Test-Path $active)) { throw 'Transactional updater did not activate a version pointer' }
+            $version = (Get-Content $active -Raw).Trim()
+            $updated = Join-Path (Join-Path $installed 'data/versions') $version
+            & ./dist/windows/full_lexicon_smoke.exe (Join-Path $installed 'wowtype_core.dll') (Join-Path $updated 'lexicon.tsv') (Join-Path $updated 'words.lm')
+            if ($LASTEXITCODE -ne 0) { throw 'Activated lexicon failed native Rust engine smoke' }
           } finally {
             & ./dist/windows/Uninstall-Tsf.ps1
           }
           if (Test-Path $key) { throw 'Uninstall did not remove HKCU COM CLSID' }
+          if (Get-ScheduledTask -TaskName 'WowTypeTSF-LexiconUpdate' -ErrorAction SilentlyContinue) {
+            throw 'Uninstall left a recurring updater task behind'
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: wowtype-windows11-tsf-UNSIGNED-PROTOTYPE
@@ -84,6 +106,9 @@ jobs:
             dist/windows/data/english.txt
             dist/windows/Install-Tsf.ps1
             dist/windows/Uninstall-Tsf.ps1
+            dist/windows/Update-Lexicon.ps1
+            dist/windows/Manage-LexiconUpdate.ps1
+            dist/windows/full_lexicon_smoke.exe
             dist/windows/WINDOWS-TSF.md
           if-no-files-found: error
           retention-days: 7

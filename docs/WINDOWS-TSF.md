@@ -115,3 +115,77 @@ OLD Uninstall-Tsf.ps1 under the same Windows account. Unzip a NEW full-lexicon
 artifact and run its Install-Tsf.ps1. If an open process prevents removal,
 restart Windows before trying to install the new DLL again. Installation of
 a package lacking the real lexicon or words.lm now explicitly fails.
+
+
+## Phase 2.2: weekly offline dictionary updates (Windows)
+
+**Input remains offline.** The keyboard DLL and Rust engine never make a network
+request, and input text is not used in any update request. A separate, user-level
+PowerShell updater contacts ONLY GitHub's official release metadata and assets
+to check whether a new rime-ice dictionary is available.
+
+After installing this version, a scheduled task named
+WowTypeTSF-LexiconUpdate checks each **Sunday at 03:00 local time** (when
+the user is logged in; missed starts run when next possible). It does not
+need administrator rights and does not monitor input. The installed
+Update-Lexicon.ps1 can also be run manually:
+
+    & "$env:LOCALAPPDATA\Programs\WowTypeTSF\Update-Lexicon.ps1" -CheckOnly
+    & "$env:LOCALAPPDATA\Programs\WowTypeTSF\Update-Lexicon.ps1"
+
+To disable automatic checks while keeping the input method installed:
+
+    & "$env:LOCALAPPDATA\Programs\WowTypeTSF\Manage-LexiconUpdate.ps1" -Disable
+
+To view schedule status or reenable:
+
+    & "$env:LOCALAPPDATA\Programs\WowTypeTSF\Manage-LexiconUpdate.ps1" -Status
+    & "$env:LOCALAPPDATA\Programs\WowTypeTSF\Manage-LexiconUpdate.ps1"
+
+To install with automatic checks disabled, pass -DisableAutoUpdate to
+Install-Tsf.ps1. Uninstall-Tsf.ps1 removes the scheduled task.
+
+Updater trust model:
+- Only the official stable Gloridust/WowType GitHub release is considered.
+- Only a uniquely named rime-ice data asset is used; the URL must match
+  the official tag/name. GitHub must provide a SHA-256 digest. If missing,
+  updating fails closed.
+- A newer 4-component data version is required. It checks the archive digest,
+  validates layout, requires at least 500k lexicon rows, retains SOURCE.txt,
+  LICENSE and words.lm, and then runs the bundled native Rust C ABI smoke
+  using the new data. No user text is submitted.
+- New data is staged in immutable data/versions/<version>/ and activated only
+  by atomically replacing data/active.txt. The original data/lexicon.tsv and
+  data/words.lm remain available for rollback. If validation fails, the pointer
+  is not changed.
+- The TSF engine loads the newest data on next activation / safe idle focus.
+  An existing in-progress composition keeps its previous in-memory snapshot;
+  no input event waits for a network response.
+- A log containing only updater version/status information is written under
+  %LOCALAPPDATA%\Programs\WowTypeTSF\logs\lexicon-update.log.
+
+Security boundaries: SHA-256 proves asset bytes match the digest published by
+GitHub. It is NOT proof against compromise of the same upstream release account.
+Windows TSF code signing / production release security review remain open.
+
+## Phase 2.2: candidate pagination
+
+The Rust engine's default page_size is **9**, not a limit on total candidates.
+The Windows TSF frontend now displays the current page and page count when
+there are multiple candidate pages.
+
+While composing:
+- PageDown: next page; PageUp: previous page.
+- = : next page; - : previous page (the normal Rime page keys).
+- 1-9: select the candidate on the CURRENT page.
+- Space: commit the highlighted/first candidate on the current page.
+
+The CI native ABI smoke exercises at least two candidate pages on the complete
+929k+ dictionary and selects an entry on page two. The popup still needs
+mouse-wheel/touch and accessibility integration in a later phase.
+
+The upgrade to this scheduled-task-enabled version requires ONE normal
+uninstall/reinstall of the TSF DLL, under the same Windows account. Subsequent
+DATA-only updates no longer require reinstalling the input method. If the
+system's Task Scheduler refuses task registration, installation should show
+an explicit warning; the IME remains offline and manual updating is possible.

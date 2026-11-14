@@ -14,6 +14,7 @@
 #include <utility>
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 #include "wowtype_core.h"
@@ -60,11 +61,33 @@ static std::wstring Wide(const char *text) {
     return output;
 }
 
+// Update transaction writes a single ASCII version pointer after validating the new
+// dictionary/LM. Old versions remain immutable and loaded sessions are unaffected.
+static fs::path ResolveActiveDataDir(const fs::path &module_path) {
+    auto root = module_path / L"data";
+    auto pointer = root / L"active.txt";
+    std::ifstream in(pointer, std::ios::binary);
+    if (!in.is_open()) return root;
+    std::string version;
+    if (!std::getline(in, version) || version.empty() || version.size() > 40) return root;
+    for (char c : version) {
+        if (!((c >= '0' && c <= '9') || c == '.')) return root;
+    }
+    auto active = root / L"versions" / Wide(version.c_str());
+    if (fs::is_regular_file(active / L"lexicon.tsv") &&
+        fs::is_regular_file(active / L"words.lm")) return active;
+    return root;
+}
+
 struct Snapshot {
     bool handled = false;
     std::wstring preedit;
     std::wstring commit;
     std::vector<std::wstring> candidates;
+    bool has_prev = false;
+    bool has_next = false;
+    size_t page = 0;
+    size_t pages = 0;
 };
 
 class CoreSession {
@@ -79,6 +102,9 @@ class CoreSession {
     const WowtypeFrame *(*key_)(WowtypeSession *, const WowtypeKey *) = nullptr;
     const WowtypeFrame *(*reset_)(WowtypeSession *, int) = nullptr;
     const char *(*candidate_)(WowtypeSession *, size_t) = nullptr;
+    fs::path loaded_data_dir_;
+    int (*view_)(WowtypeSession *, WowtypeSessionView *) = nullptr;
+    size_t (*candidate_total_)(WowtypeSession *) = nullptr;
 public:
     CoreSession() = default;
     ~CoreSession() { Close(); }
@@ -93,6 +119,7 @@ public:
         engine_ = nullptr;
         if (library_) FreeLibrary(library_);
         library_ = nullptr;
+        loaded_data_dir_.clear();
     }
 
     bool Open() {
@@ -115,13 +142,16 @@ public:
         LOAD_FN(key_, "wowtype_session_key")
         LOAD_FN(reset_, "wowtype_session_reset")
         LOAD_FN(candidate_, "wowtype_session_candidate")
+        LOAD_FN(view_, "wowtype_session_view")
+        LOAD_FN(candidate_total_, "wowtype_session_candidate_total")
         #undef LOAD_FN
         int version = abi_();
         if (version / 1000 != WOWTYPE_ABI_VERSION_MAJOR ||
             version % 1000 < 6) { Close(); return false; }
 
-        auto dictionary = path / L"data" / L"lexicon.tsv";
-        auto language_model = path / L"data" / L"words.lm";
+        auto data_dir = ResolveActiveDataDir(path);
+        auto dictionary = data_dir / L"lexicon.tsv";
+        auto language_model = data_dir / L"words.lm";
         // A production-sized offline dictionary is mandatory, never silently fall back
         // to the 14-entry demo lexicon shipped solely for core unit tests.
         if (!fs::is_regular_file(dictionary) || !fs::is_regular_file(language_model)) {
@@ -134,6 +164,33 @@ public:
         if (!engine_) { Close(); return false; }
         session_ = new_session_(engine_, nullptr);
         if (!session_) { Close(); return false; }
+        loaded_data_dir_ = data_dir;
+        return true;
+    }
+
+    // Called only when the service is idle (focus regained). Construct the new
+    // engine fully before releasing the old one, so failed updates cannot kill input.
+    bool ReloadIfChanged() {
+        if (!Ready()) return Open();
+        auto path = fs::path(ModuleFile()).parent_path();
+        if (ResolveActiveDataDir(path) == loaded_data_dir_) return false;
+        CoreSession newer;
+        if (!newer.Open()) return false;
+        using std::swap;
+        swap(library_, newer.library_);
+        swap(engine_, newer.engine_);
+        swap(session_, newer.session_);
+        swap(abi_, newer.abi_);
+        swap(new_engine_, newer.new_engine_);
+        swap(free_engine_, newer.free_engine_);
+        swap(new_session_, newer.new_session_);
+        swap(free_session_, newer.free_session_);
+        swap(key_, newer.key_);
+        swap(reset_, newer.reset_);
+        swap(candidate_, newer.candidate_);
+        swap(view_, newer.view_);
+        swap(candidate_total_, newer.candidate_total_);
+        swap(loaded_data_dir_, newer.loaded_data_dir_);
         return true;
     }
 
@@ -150,6 +207,13 @@ public:
         result.handled = frame->handled != 0;
         result.preedit = Wide(frame->preedit);
         result.commit = Wide(frame->commit);
+        result.has_prev = frame->has_prev != 0;
+        result.has_next = frame->has_next != 0;
+        WowtypeSessionView view{};
+        view.size = sizeof(view);
+        if (view_(session_, &view) == 0) result.page = view.page;
+        const size_t total = candidate_total_(session_);
+        result.pages = total ? (total + 8) / 9 : 0;
         size_t n = std::min(frame->cand_count, static_cast<size_t>(9));
         for (size_t i = 0; i < n; ++i) {
             result.candidates.push_back(Wide(candidate_(session_, i)));
@@ -228,6 +292,11 @@ public:
         for (size_t i = 0; i < frame.candidates.size(); ++i) {
             if (i) text_ += (i % 4 == 0) ? L"\n" : L"   ";
             text_ += std::to_wstring(i + 1) + L". " + frame.candidates[i];
+        }
+        if (frame.pages > 1 || frame.has_prev || frame.has_next) {
+            text_ += L"\n";
+            text_ += L"Page " + std::to_wstring(frame.page + 1) + L"/" +
+                     std::to_wstring(frame.pages) + L"  [PgUp/-] [PgDn/=]";
         }
 
         HDC dc = GetDC(window_);
@@ -322,6 +391,7 @@ class TextService final : public ITfTextInputProcessorEx,
         }
         if (!composition_) return false;
         if (key >= '0' && key <= '9') return true;
+        if (key == VK_OEM_MINUS || key == VK_OEM_PLUS) return true;
         switch (key) {
         case VK_SPACE: case VK_RETURN: case VK_BACK: case VK_ESCAPE:
         case VK_LEFT: case VK_RIGHT: case VK_UP: case VK_DOWN:
@@ -343,6 +413,8 @@ class TextService final : public ITfTextInputProcessorEx,
         case VK_DOWN: return 0xFF54;
         case VK_PRIOR: return 0xFF55;
         case VK_NEXT: return 0xFF56;
+        case VK_OEM_MINUS: return 0x2d;
+        case VK_OEM_PLUS: return 0x3d;
         default: return 0;
         }
     }
@@ -565,12 +637,13 @@ public:
         thread_mgr_.Reset();
         composition_.Reset();
         composition_context_.Reset();
-        core_.Reset();
+        core_.Close();
         client_id_ = TF_CLIENTID_NULL;
         return S_OK;
     }
     STDMETHODIMP OnSetFocus(BOOL foreground) override {
         if (!foreground) { CancelComposition(); core_.Reset(); popup_.Hide(); }
+        else if (!composition_) core_.ReloadIfChanged();
         return S_OK;
     }
     STDMETHODIMP OnTestKeyDown(ITfContext *, WPARAM key, LPARAM, BOOL *eaten) override {
@@ -630,7 +703,9 @@ public:
     STDMETHODIMP OnInitDocumentMgr(ITfDocumentMgr *) override { return S_OK; }
     STDMETHODIMP OnUninitDocumentMgr(ITfDocumentMgr *) override { return S_OK; }
     STDMETHODIMP OnSetFocus(ITfDocumentMgr *, ITfDocumentMgr *) override {
-        CancelComposition(); core_.Reset(); popup_.Hide(); return S_OK;
+        CancelComposition(); core_.Reset(); popup_.Hide();
+        core_.ReloadIfChanged();
+        return S_OK;
     }
     STDMETHODIMP OnPushContext(ITfContext *) override { return S_OK; }
     STDMETHODIMP OnPopContext(ITfContext *) override {

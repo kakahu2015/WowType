@@ -2,6 +2,12 @@
 $ErrorActionPreference = 'Stop'
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
 $dll = Join-Path $destination 'WowTypeTSF.dll'
+# Prevent a scheduled update from recreating files while uninstall is removing them.
+$task = Get-ScheduledTask -TaskName 'WowTypeTSF-LexiconUpdate' -ErrorAction SilentlyContinue
+if ($task) {
+    Unregister-ScheduledTask -TaskName 'WowTypeTSF-LexiconUpdate' -Confirm:$false -ErrorAction Stop
+    Write-Host 'Removed WowType per-user weekly dictionary update task.'
+}
 if (Test-Path $dll) {
     $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
     $unregistration = Start-Process -FilePath $regsvr32 -ArgumentList @('/u', '/s', ('"' + $dll + '"')) -Wait -PassThru

@@ -32,6 +32,9 @@ Copy-Item 'target/release/wowtype_core.dll' (Join-Path $destination 'wowtype_cor
 Copy-Item 'core/data/demo_lexicon.tsv' (Join-Path $destination 'data/demo_lexicon.tsv') -Force
 # Build-time network access only; the Windows input method is fully offline.
 & (Join-Path $PSScriptRoot 'Get-OfflineLexicon.ps1') -OutputDir (Join-Path $destination 'data')
+Checked cl.exe @('/nologo','/W4','/TC','/Icore/include','windows/core/abi_smoke.c',"/Fe:$(Join-Path $destination 'full_lexicon_smoke.exe')")
+Copy-Item 'scripts/windows/Update-Lexicon.ps1' (Join-Path $destination 'Update-Lexicon.ps1') -Force
+Copy-Item 'scripts/windows/Manage-LexiconUpdate.ps1' (Join-Path $destination 'Manage-LexiconUpdate.ps1') -Force
 Copy-Item 'scripts/windows/Install-Tsf.ps1' (Join-Path $destination 'Install-Tsf.ps1') -Force
 Copy-Item 'scripts/windows/Uninstall-Tsf.ps1' (Join-Path $destination 'Uninstall-Tsf.ps1') -Force
 Copy-Item 'docs/WINDOWS-TSF.md' (Join-Path $destination 'WINDOWS-TSF.md') -Force
