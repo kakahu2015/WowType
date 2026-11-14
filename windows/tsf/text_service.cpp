@@ -2,6 +2,7 @@
 // In-process COM text service; no global hooks, keyboard simulation or networking.
 // Requires wowtype_core.dll and data/demo_lexicon.tsv beside the installed module.
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <msctf.h>
 #include <wrl/client.h>
@@ -545,7 +546,7 @@ static void DeleteComRegistration() {
 
 static HRESULT RegisterProfile() {
     ComPtr<ITfInputProcessorProfileMgr> profiles;
-    HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfileMgr, nullptr,
+    HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr,
                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(profiles.GetAddressOf()));
     if (FAILED(hr)) return hr;
     static const wchar_t description[] = L"WowType Chinese (prototype)";
@@ -569,7 +570,7 @@ static void UnregisterProfile() {
                                     IID_PPV_ARGS(categories.GetAddressOf()))))
         categories->UnregisterCategory(CLSID_WowTypeTsf, GUID_TFCAT_TIP_KEYBOARD, CLSID_WowTypeTsf);
     ComPtr<ITfInputProcessorProfileMgr> profiles;
-    if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfileMgr, nullptr,
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr,
                                     CLSCTX_INPROC_SERVER, IID_PPV_ARGS(profiles.GetAddressOf()))))
         profiles->UnregisterProfile(CLSID_WowTypeTsf, kLangZhCn, GUID_WowTypeProfile, 0);
 }

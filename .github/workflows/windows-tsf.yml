@@ -44,6 +44,11 @@ jobs:
           foreach ($symbol in @('DllGetClassObject','DllCanUnloadNow','DllRegisterServer','DllUnregisterServer')) {
             if (!($symbols -match " $symbol$")) { throw "Export missing: $symbol" }
           }
+      - name: Compile COM activation smoke
+        shell: pwsh
+        run: |
+          & cl.exe /nologo /W4 /EHsc /std:c++20 /utf-8 windows/tsf/com_smoke.cpp /Fe:dist/windows/com_smoke.exe /link ole32.lib msctf.lib uuid.lib
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot compile native COM activation smoke' }
       - name: Per-user COM and TSF registration / unregister smoke
         shell: pwsh
         run: |
@@ -53,6 +58,8 @@ jobs:
             & "$env:WINDIR\System32\regsvr32.exe" /s $dll
             if ($LASTEXITCODE -ne 0) { throw "regsvr32 failed ($LASTEXITCODE)" }
             if (!(Test-Path $key)) { throw 'Missing HKCU COM CLSID registration' }
+            & 'dist/windows/com_smoke.exe'
+            if ($LASTEXITCODE -ne 0) { throw 'COM class activation failed' }
           } finally {
             & "$env:WINDIR\System32\regsvr32.exe" /u /s $dll
             if ($LASTEXITCODE -ne 0) { throw "regsvr32 /u failed ($LASTEXITCODE)" }
