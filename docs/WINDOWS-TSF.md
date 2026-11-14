@@ -32,8 +32,8 @@ Select "WowType Chinese (prototype)" in the Windows language/input methods setti
 | x64 C++ TSF DLL compile/link | Windows TSF Prototype workflow | Pending |
 | Required COM exports | CI dumpbin | Pending |
 | HKCU registration/unregistration | CI regsvr32 | Pending |
-| Actual profile present in system input method UI | Not covered | Pending |
-| Composition, candidate window and selected Unicode insertion | Not covered | Pending |
+| Actual profile present in system input method UI | Not covered | Confirmed: WowType appears in Chinese (Simplified) keyboard switcher (2026-11-14) |
+| Composition, candidate window and selected Unicode insertion | Not covered | Browser inline ni'hao composition + 1. 你好 candidate confirmed; Space-to-commit still unverified (2026-11-14) |
 | Word/Chrome/WeChat/VS Code focus changes | Not covered | Pending |
 | CPU/per-key latency, unload, app crash isolation | Not covered | Pending |
 
@@ -42,14 +42,42 @@ Select "WowType Chinese (prototype)" in the Windows language/input methods setti
 1. This is a minimal in-process TSF experiment. Focus changes and composition termination need broader native testing. The candidate popup does not yet support mouse selection or paging UI.
 2. A demo lexicon ships with the artifact. It is not the full dictionary or trained language model. For full dictionary experiments, supply a legally distributable lexicon at data/lexicon.tsv and verify its license.
 3. Microsoft TSF hosts can refuse synchronous edit sessions. The code then falls back to letting original keystrokes pass; a full error-recovery state machine is pending.
-4. No Windows 11 desktop validation, offline voice recognition, local translation, app installer/MSIX, accessibility, signing, or production suitability claims are made.
+4. Initial Windows 11 manual UI evidence confirms profile visibility and live browser Pinyin composition with Chinese candidates. It does **not** yet confirm Unicode commit by Space, Notepad compatibility, offline voice recognition, local translation, MSIX, accessibility, signing, or production suitability.
 5. User input and clipboard content are not logged, transmitted or persisted by the new Windows TSF code. Third-party models are not bundled.
 6. Dev-mode registration is per-user. Uninstallation must occur with the same user account. Close all apps that may have loaded the text service before updating/uninstalling.
 7. Per-document composition and lifetime behavior remain to be audited; do not use the prototype in password managers or sensitive applications.
 
 ## Next steps
 
-- Obtain real Windows 11 screen/ETW observation and test Notepad composition, candidate selection, focus transitions and rollback.
+- Confirm Space-to-commit of 你好 in the browser and Notepad; capture any focus switching and rollback errors.
 - Guard password/input-scope and read-only contexts, add native COM activation and focus switching harness.
-- Improve candidate geometry using ITfContextView::GetTextExt, and implement accessibility/UI-element integration.
+- Verify candidate popup placement and compact sizing in Chrome and Notepad after switching to ITfContextView::GetTextExt. Add TSF layout-change events and accessibility/UI-element integration.
 - Only after stable testing, add full dictionary/setting UI, signing, release installer and Win11 arm64 feasibility.
+
+
+## Phase 2 UI iteration: candidate layout
+
+A real Windows 11 web input test on 2026-11-14 showed that the previous popup
+was a fixed 340 x 160 rectangle detached from the insertion point. The next
+prototype makes these changes in windows/tsf/text_service.cpp:
+
+- Capture a caret range while a valid TF edit cookie is held, using
+  ITfContext::GetActiveView and ITfContextView::GetTextExt. Its rectangle is
+  already in screen coordinates. Prefer it over mouse or Win32 caret position.
+- Query before mutating composition, since web text stores may return
+  TS_E_NOLAYOUT just after SetText. If the host cannot provide a layout,
+  preserve a valid earlier caret rectangle and then use a Win32 fallback.
+- Size the non-activating popup from measured font and candidate rows, with
+  monitor-edge clamping and flip-above-caret at the bottom of the screen.
+
+IMPORTANT: screenshot confirms display only. It does not prove completion of
+Space-to-commit. The geometry fix requires a fresh desktop test before approval.
+
+### Upgrade test (from the previous DLL)
+
+Switch to Microsoft Pinyin and close applications that may have loaded
+WowTypeTSF.dll (notably the browser, Notepad or editors). Run the existing
+Uninstall-Tsf.ps1 under the SAME Windows account; then install the new
+artifact's Install-Tsf.ps1. If the old DLL remains in use, close the
+applications or restart Windows before deleting/replacing it. Never
+overwrite an in-use TSF DLL and treat a failed unregister as a blocker.

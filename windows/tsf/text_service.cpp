@@ -153,9 +153,13 @@ public:
     }
 };
 
+// Candidate window is a non-activating view, never a text input target.
+// Geometry comes from TSF document coordinates when available.
 class Candidates {
     HWND window_ = nullptr;
+    HFONT font_ = nullptr;
     std::wstring text_;
+
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         if (message == WM_NCCREATE) {
             auto cs = reinterpret_cast<CREATESTRUCTW *>(lp);
@@ -168,58 +172,117 @@ class Candidates {
             RECT bounds{};
             GetClientRect(hwnd, &bounds);
             FillRect(dc, &bounds, reinterpret_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
-            SetTextColor(dc, RGB(25, 25, 25));
+            SetTextColor(dc, RGB(27, 27, 27));
             SetBkMode(dc, TRANSPARENT);
             if (self) {
-                bounds.left += 8; bounds.top += 6;
+                HGDIOBJ old = self->font_ ? SelectObject(dc, self->font_) : nullptr;
+                bounds.left += 9; bounds.top += 6;
+                bounds.right -= 9; bounds.bottom -= 6;
                 DrawTextW(dc, self->text_.c_str(), -1, &bounds, DT_LEFT | DT_NOPREFIX | DT_WORDBREAK);
+                if (old) SelectObject(dc, old);
             }
             EndPaint(hwnd, &ps);
             return 0;
         }
         return DefWindowProcW(hwnd, message, wp, lp);
     }
+
+    bool EnsureWindow() {
+        if (window_) return true;
+        static constexpr wchar_t kClass[] = L"WowTypeTsfCandidatePrototype";
+        WNDCLASSEXW wc{sizeof(wc)};
+        wc.lpfnWndProc = WindowProc;
+        wc.hInstance = g_module;
+        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        wc.lpszClassName = kClass;
+        RegisterClassExW(&wc); // ERROR_CLASS_ALREADY_EXISTS is benign.
+        window_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+                                 kClass, L"", WS_POPUP | WS_BORDER,
+                                 0, 0, 220, 68, nullptr, nullptr, g_module, this);
+        if (!window_) return false;
+        const UINT dpi = GetDpiForWindow(window_);
+        font_ = CreateFontW(-MulDiv(12, dpi, 72), 0, 0, 0, FW_NORMAL,
+                            FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH,
+                            L"Microsoft YaHei UI");
+        return true;
+    }
 public:
-    ~Candidates() { Hide(); if (window_) DestroyWindow(window_); }
+    ~Candidates() {
+        Hide();
+        if (window_) DestroyWindow(window_);
+        if (font_) DeleteObject(font_);
+    }
     void Hide() { if (window_) ShowWindow(window_, SW_HIDE); }
-    void Show(const Snapshot &frame) {
+
+    void Show(const Snapshot &frame, const RECT *document_caret) {
         if (frame.preedit.empty() || frame.candidates.empty()) { Hide(); return; }
-        if (!window_) {
-            static constexpr wchar_t kClass[] = L"WowTypeTsfCandidatePrototype";
-            WNDCLASSEXW wc{sizeof(wc)};
-            wc.lpfnWndProc = WindowProc;
-            wc.hInstance = g_module;
-            wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-            wc.lpszClassName = kClass;
-            RegisterClassExW(&wc); // Already-registered is harmless.
-            window_ = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-                                     kClass, L"", WS_POPUP | WS_BORDER, 0, 0, 340, 160,
-                                     nullptr, nullptr, g_module, this);
-            if (!window_) return;
-        }
-        text_ = frame.preedit + L"\r\n";
+        if (!EnsureWindow()) return;
+
+        text_ = frame.preedit + L"\n";
         for (size_t i = 0; i < frame.candidates.size(); ++i) {
-            text_ += std::to_wstring(i + 1) + L". " + frame.candidates[i] + L"   ";
-            if (i == 3) text_ += L"\r\n";
+            if (i) text_ += (i % 4 == 0) ? L"\n" : L"   ";
+            text_ += std::to_wstring(i + 1) + L". " + frame.candidates[i];
         }
-        GUITHREADINFO info{sizeof(info)};
-        POINT pos{80, 90};
-        if (GetGUIThreadInfo(0, &info) && info.hwndCaret) {
-            pos.x = info.rcCaret.left;
-            pos.y = info.rcCaret.bottom + 6;
-            ClientToScreen(info.hwndCaret, &pos);
+
+        HDC dc = GetDC(window_);
+        if (!dc) return;
+        HGDIOBJ old = font_ ? SelectObject(dc, font_) : nullptr;
+        TEXTMETRICW tm{};
+        GetTextMetricsW(dc, &tm);
+        int max_line = 0;
+        size_t start = 0;
+        int lines = 0;
+        while (start < text_.length()) {
+            size_t end = text_.find(L'\n', start);
+            if (end == std::wstring::npos) end = text_.length();
+            SIZE extent{};
+            if (GetTextExtentPoint32W(dc, text_.data() + start,
+                    static_cast<int>(end - start), &extent)) {
+                max_line = std::max(max_line, extent.cx);
+            }
+            ++lines;
+            start = end + 1;
+        }
+        const int width = std::clamp(max_line + 24, 150, 450);
+        // Let DirectWrite/DrawText wrapping determine the final height for long candidates.
+        RECT layout{0, 0, width - 18, 0};
+        DrawTextW(dc, text_.c_str(), -1, &layout,
+                  DT_CALCRECT | DT_LEFT | DT_NOPREFIX | DT_WORDBREAK);
+        const int estimated = lines * (tm.tmHeight + 2) + 14;
+        const int height = std::clamp(std::max(estimated, layout.bottom + 14), 45, 220);
+        if (old) SelectObject(dc, old);
+        ReleaseDC(window_, dc);
+
+        POINT pos{};
+        if (document_caret) {
+            // ITfContextView::GetTextExt returns SCREEN coordinates, not HWND client pixels.
+            pos.x = document_caret->right;
+            pos.y = document_caret->bottom + 5;
         } else {
-            GetCursorPos(&pos);
+            GUITHREADINFO info{sizeof(info)};
+            if (GetGUIThreadInfo(0, &info) && info.hwndCaret) {
+                pos.x = info.rcCaret.left;
+                pos.y = info.rcCaret.bottom + 5;
+                ClientToScreen(info.hwndCaret, &pos);
+            } else {
+                // Some web-app text stores provide neither TSF layout nor Win32 caret.
+                GetCursorPos(&pos);
+            }
         }
+
         HMONITOR monitor = MonitorFromPoint(pos, MONITOR_DEFAULTTONEAREST);
         MONITORINFO monitor_info{sizeof(monitor_info)};
         if (GetMonitorInfoW(monitor, &monitor_info)) {
+            if (document_caret && pos.y + height > monitor_info.rcWork.bottom) {
+                pos.y = document_caret->top - height - 5;
+            }
             pos.x = std::clamp(pos.x, monitor_info.rcWork.left,
-                               std::max(monitor_info.rcWork.left, monitor_info.rcWork.right - 340));
+                               std::max(monitor_info.rcWork.left, monitor_info.rcWork.right - width));
             pos.y = std::clamp(pos.y, monitor_info.rcWork.top,
-                               std::max(monitor_info.rcWork.top, monitor_info.rcWork.bottom - 160));
+                               std::max(monitor_info.rcWork.top, monitor_info.rcWork.bottom - height));
         }
-        SetWindowPos(window_, HWND_TOPMOST, pos.x, pos.y, 340, 160,
+        SetWindowPos(window_, HWND_TOPMOST, pos.x, pos.y, width, height,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
         InvalidateRect(window_, nullptr, TRUE);
     }
@@ -239,6 +302,8 @@ class TextService final : public ITfTextInputProcessorEx,
     TfClientId client_id_ = TF_CLIENTID_NULL;
     CoreSession core_;
     Candidates popup_;
+    RECT popup_anchor_{};
+    bool popup_anchor_valid_ = false;
     bool active_ = false;
 
     bool CanHandle(WPARAM key) const {
@@ -277,9 +342,41 @@ class TextService final : public ITfTextInputProcessorEx,
         }
     }
 
+    // Probe the insertion point while holding a TSF edit cookie.
+    // Query BEFORE modifying text: Chromium may report TS_E_NOLAYOUT
+    // immediately after changing the composition.
+    void CaptureAnchor(ITfContext *context, TfEditCookie cookie) {
+        ComPtr<ITfContextView> view;
+        if (FAILED(context->GetActiveView(view.GetAddressOf()))) return;
+
+        ComPtr<ITfRange> range;
+        if (composition_ && composition_context_.Get() == context) {
+            if (FAILED(composition_->GetRange(range.GetAddressOf()))) return;
+        } else {
+            TF_SELECTION selection{};
+            ULONG count = 0;
+            if (FAILED(context->GetSelection(cookie, TF_DEFAULT_SELECTION, 1,
+                                             &selection, &count)) || !count || !selection.range)
+                return;
+            range.Attach(selection.range); // Own and release GetSelection's range.
+        }
+
+        ComPtr<ITfRange> caret;
+        if (FAILED(range->Clone(caret.GetAddressOf())) ||
+            FAILED(caret->Collapse(cookie, TF_ANCHOR_END))) return;
+        RECT rect{};
+        BOOL clipped = FALSE;
+        if (SUCCEEDED(view->GetTextExt(cookie, caret.Get(), &rect, &clipped)) &&
+            !clipped && (rect.right > 0 || rect.bottom > 0)) {
+            popup_anchor_ = rect;
+            popup_anchor_valid_ = true;
+        }
+    }
+
     HRESULT ApplyEdit(ITfContext *context, TfEditCookie cookie, const Snapshot &frame) {
         // Never apply a composition range belonging to a different document.
         if (composition_ && composition_context_.Get() != context) CancelComposition();
+        if (!frame.preedit.empty()) CaptureAnchor(context, cookie);
         if (frame.preedit.empty() && frame.commit.empty() && !composition_) return S_OK;
         ComPtr<ITfInsertAtSelection> insert;
         HRESULT hr = context->QueryInterface(IID_PPV_ARGS(insert.GetAddressOf()));
@@ -393,6 +490,7 @@ class TextService final : public ITfTextInputProcessorEx,
         // Detach immediately so subsequent keys cannot reach the old range.
         composition_.Reset();
         composition_context_.Reset();
+        popup_anchor_valid_ = false;
         if (context && client_id_ != TF_CLIENTID_NULL) {
             auto edit = new (std::nothrow) CancelEdit(old.Get());
             if (edit) {
@@ -450,6 +548,7 @@ public:
     }
     STDMETHODIMP Deactivate() override {
         popup_.Hide();
+        popup_anchor_valid_ = false;
         CancelComposition();
         if (thread_source_ && source_cookie_ != TF_INVALID_COOKIE)
             thread_source_->UnadviseSink(source_cookie_);
@@ -504,7 +603,7 @@ public:
             popup_.Hide();
             return S_OK; // Do not swallow user keys if no writable edit session exists.
         }
-        popup_.Show(frame);
+        popup_.Show(frame, popup_anchor_valid_ ? &popup_anchor_ : nullptr);
         *eaten = TRUE;
         return S_OK;
     }
@@ -517,6 +616,7 @@ public:
         if (composition_.Get() == terminated) {
             composition_.Reset();
             composition_context_.Reset();
+            popup_anchor_valid_ = false;
             core_.Reset();
             popup_.Hide();
         }
