@@ -67,6 +67,7 @@ jobs:
         run: |
           $key = 'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{9aebaf46-3231-4f65-836d-0972c2396181}'
           try {
+            if (!(Test-Path 'dist/windows/data/VERSION')) { throw 'Installer bundle missing VERSION' }
             & ./dist/windows/Install-Tsf.ps1
             if (!(Test-Path $key)) { throw 'Missing HKCU COM CLSID registration' }
             & ./dist/windows/com_smoke.exe

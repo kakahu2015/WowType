@@ -77,11 +77,14 @@ try {
     foreach ($name in $required) {
         Copy-Item -LiteralPath (Join-Path $source $name) -Destination (Join-Path $OutputDir $name) -Force
     }
-    foreach ($optional in @('VERSION', 'english.txt')) {
+    foreach ($optional in @('english.txt')) {
         if (Test-Path -LiteralPath (Join-Path $source $optional) -PathType Leaf) {
             Copy-Item -LiteralPath (Join-Path $source $optional) -Destination (Join-Path $OutputDir $optional) -Force
         }
     }
+    # Official tarballs may omit VERSION. Derive it from the HASH-PINNED asset name.
+    $version = '2026.11.11.3'
+    [IO.File]::WriteAllText((Join-Path $OutputDir 'VERSION'), $version, (New-Object System.Text.ASCIIEncoding))
     Write-Host "WowType Windows OFFLINE lexicon ready: $entries entries; model and GPL/CC BY-SA provenance included"
     Write-Host "Dictionary source: $Url"
     Get-FileHash -LiteralPath (Join-Path $OutputDir 'lexicon.tsv') -Algorithm SHA256

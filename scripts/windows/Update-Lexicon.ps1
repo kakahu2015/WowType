@@ -159,6 +159,15 @@ try {
     $lexicons = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'lexicon.tsv')
     if ($lexicons.Count -ne 1) { throw 'Expected exactly one upstream lexicon.tsv' }
     $sourceDir = $lexicons[0].DirectoryName
+    # Official tarballs need not contain VERSION: the authenticated release asset
+    # name is canonical after checking the GitHub-published SHA-256 digest.
+    $archiveVersion = Join-Path $sourceDir 'VERSION'
+    if (Test-Path -LiteralPath $archiveVersion -PathType Leaf) {
+        $seenVersion = (Get-Content -LiteralPath $archiveVersion -Raw).Trim()
+        if ($seenVersion -ne $versionName) { throw 'Archive VERSION disagrees with release asset name' }
+    } else {
+        [IO.File]::WriteAllText($archiveVersion, $versionName, (New-Object System.Text.ASCIIEncoding))
+    }
     $count = Validate-Data $sourceDir
 
     # Rust core checks whether lexicon AND words.lm can load and perform Unicode selection.

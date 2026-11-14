@@ -20,7 +20,7 @@ $srcSmoke = Join-Path $BundleDir 'full_lexicon_smoke.exe'
 $srcUpdater = Join-Path $BundleDir 'Update-Lexicon.ps1'
 $srcManage = Join-Path $BundleDir 'Manage-LexiconUpdate.ps1'
 $srcDataDir = Join-Path $BundleDir 'data'
-$requiredData = @('lexicon.tsv', 'words.lm', 'LICENSE', 'SOURCE.txt')
+$requiredData = @('lexicon.tsv', 'words.lm', 'LICENSE', 'SOURCE.txt', 'VERSION')
 $requiredFiles = @($srcTip, $srcCore, $srcSmoke, $srcUpdater, $srcManage) + @($requiredData | ForEach-Object { Join-Path $srcDataDir $_ })
 foreach ($file in $requiredFiles) {
     if (!(Test-Path $file)) { throw "Missing package file: $file" }
@@ -37,7 +37,7 @@ Copy-Item $srcManage (Join-Path $destination 'Manage-LexiconUpdate.ps1') -Force
 foreach ($name in $requiredData) {
     Copy-Item (Join-Path $srcDataDir $name) (Join-Path (Join-Path $destination 'data') $name) -Force
 }
-foreach ($optional in @('VERSION', 'english.txt')) {
+foreach ($optional in @('english.txt')) {
     $path = Join-Path $srcDataDir $optional
     if (Test-Path $path) { Copy-Item $path (Join-Path (Join-Path $destination 'data') $optional) -Force }
 }
