@@ -2,8 +2,16 @@
 # Requires TSF DLL, Rust core DLL and data directory produced by Build-Tsf.ps1.
 param([string]$BundleDir = '')
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-if (!$BundleDir) { $BundleDir = Join-Path $root 'dist/windows' }
+if (!$BundleDir) {
+    if (Test-Path (Join-Path $PSScriptRoot 'WowTypeTSF.dll')) {
+        # Runs directly from a downloaded GitHub Actions artifact.
+        $BundleDir = $PSScriptRoot
+    } else {
+        # Runs from repository scripts/windows.
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $BundleDir = Join-Path $root 'dist/windows'
+    }
+}
 $BundleDir = (Resolve-Path $BundleDir).Path
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
 $srcTip = Join-Path $BundleDir 'WowTypeTSF.dll'

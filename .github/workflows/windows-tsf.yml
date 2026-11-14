@@ -72,5 +72,8 @@ jobs:
             dist/windows/WowTypeTSF.dll
             dist/windows/wowtype_core.dll
             dist/windows/data/demo_lexicon.tsv
+            dist/windows/Install-Tsf.ps1
+            dist/windows/Uninstall-Tsf.ps1
+            dist/windows/WINDOWS-TSF.md
           if-no-files-found: error
           retention-days: 7

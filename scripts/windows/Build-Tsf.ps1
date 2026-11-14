@@ -30,6 +30,9 @@ Checked cl.exe @(
 )
 Copy-Item 'target/release/wowtype_core.dll' (Join-Path $destination 'wowtype_core.dll') -Force
 Copy-Item 'core/data/demo_lexicon.tsv' (Join-Path $destination 'data/demo_lexicon.tsv') -Force
+Copy-Item 'scripts/windows/Install-Tsf.ps1' (Join-Path $destination 'Install-Tsf.ps1') -Force
+Copy-Item 'scripts/windows/Uninstall-Tsf.ps1' (Join-Path $destination 'Uninstall-Tsf.ps1') -Force
+Copy-Item 'docs/WINDOWS-TSF.md' (Join-Path $destination 'WINDOWS-TSF.md') -Force
 if (!(Test-Path $target)) { throw "Missing $target" }
 Write-Host "Prototype bundle: $destination"
 Get-FileHash -Algorithm SHA256 $target, (Join-Path $destination 'wowtype_core.dll')
