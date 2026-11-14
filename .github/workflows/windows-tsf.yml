@@ -55,7 +55,6 @@ jobs:
           $key = 'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{9aebaf46-3231-4f65-836d-0972c2396181}'
           try {
             & ./dist/windows/Install-Tsf.ps1
-            if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Development installer failed' }
             if (!(Test-Path $key)) { throw 'Missing HKCU COM CLSID registration' }
             & ./dist/windows/com_smoke.exe
             if ($LASTEXITCODE -ne 0) { throw 'COM class activation failed' }

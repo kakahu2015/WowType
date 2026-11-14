@@ -28,8 +28,9 @@ Copy-Item $srcTip (Join-Path $destination 'WowTypeTSF.dll') -Force
 Copy-Item $srcCore (Join-Path $destination 'wowtype_core.dll') -Force
 Copy-Item $srcData (Join-Path $destination 'data/demo_lexicon.tsv') -Force
 $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
-& $regsvr32 /s (Join-Path $destination 'WowTypeTSF.dll')
-if ($LASTEXITCODE -ne 0) { throw "TSF registration failed (exit $LASTEXITCODE). Uninstall to clean up." }
+$dll = Join-Path $destination 'WowTypeTSF.dll'
+$registration = Start-Process -FilePath $regsvr32 -ArgumentList @('/s', ('"' + $dll + '"')) -Wait -PassThru
+if ($registration.ExitCode -ne 0) { throw "TSF registration failed (exit $($registration.ExitCode)). Uninstall to clean up." }
 $clsid = '9aebaf46-3231-4f65-836d-0972c2396181'
 $reg = "Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{$clsid}"
 if (!(Test-Path $reg)) { throw "COM registration missing: $reg" }

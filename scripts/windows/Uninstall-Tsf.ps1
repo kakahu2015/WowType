@@ -4,8 +4,8 @@ $destination = Join-Path $env:LOCALAPPDATA 'Programs/WowTypeTSF'
 $dll = Join-Path $destination 'WowTypeTSF.dll'
 if (Test-Path $dll) {
     $regsvr32 = Join-Path $env:WINDIR 'System32/regsvr32.exe'
-    & $regsvr32 /u /s $dll
-    if ($LASTEXITCODE -ne 0) { throw "Unregistration failed (exit $LASTEXITCODE), files retained." }
+    $unregistration = Start-Process -FilePath $regsvr32 -ArgumentList @('/u', '/s', ('"' + $dll + '"')) -Wait -PassThru
+    if ($unregistration.ExitCode -ne 0) { throw "Unregistration failed (exit $($unregistration.ExitCode)), files retained." }
 }
 $clsid = '9aebaf46-3231-4f65-836d-0972c2396181'
 $reg = "Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{$clsid}"
