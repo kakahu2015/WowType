@@ -44,16 +44,7 @@ HRESULT WriteComRegistrationUnder(HKEY root) {
 }
 
 HRESULT WriteComRegistration() {
-    // The Win+Space switcher is rendered by TextInputHost.exe, an AppContainer
-    // process whose registry view excludes HKCU\Software\Classes. A per-user
-    // class is therefore invisible to the switcher even though TSF itself
-    // enumerates the profile, which leaves every other input method selectable
-    // but not this one. Register machine-wide and mirror to the user hive for
-    // legacy consumers that still read HKCU.
-    const HRESULT machine = WriteComRegistrationUnder(HKEY_LOCAL_MACHINE);
-    if (FAILED(machine)) return machine;
-    WriteComRegistrationUnder(HKEY_CURRENT_USER);
-    return S_OK;
+    return WriteComRegistrationUnder(HKEY_CURRENT_USER);
 }
 
 void RemoveComRegistration() {

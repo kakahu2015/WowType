@@ -3,27 +3,52 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'WowType registers a machine-wide TSF class so the Win+Space switcher can see it. Rerun this script from an elevated PowerShell (Run as administrator).'
-}
+$packagePath = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\WowType'
 $required = @('WowTypeTextService.dll', 'wowtype_core.dll', 'data\lexicon.tsv', 'data\english.txt')
 foreach ($item in $required) {
-    if (-not (Test-Path (Join-Path $PackageDirectory $item))) {
+    if (-not (Test-Path (Join-Path $packagePath $item))) {
         throw "Package is missing $item"
     }
 }
 
+$classId = '{3E76C197-7A5E-4A4A-9A31-537D743F2251}'
+$machineKeyPath = "Software\Classes\CLSID\$classId\InprocServer32"
+$machineKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($machineKeyPath)
+$machineServer = if ($machineKey) { $machineKey.GetValue('') } else { $null }
+if ($machineKey) { $machineKey.Close() }
+$installedDll = Join-Path $installDirectory 'WowTypeTextService.dll'
+$legacyMachineRegistration = $machineServer -and
+    ([IO.Path]::GetFullPath($machineServer) -ieq [IO.Path]::GetFullPath($installedDll))
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if ($legacyMachineRegistration -and
+    -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -PackageDirectory "{1}"' -f $PSCommandPath, $packagePath
+    $elevated = Start-Process -FilePath (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') `
+        -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+    exit $elevated.ExitCode
+}
+
+$regsvr = Join-Path $env:WINDIR 'System32\regsvr32.exe'
+if (Test-Path $installedDll) {
+    $unregistration = Start-Process -FilePath $regsvr -ArgumentList @('/s', '/u', $installedDll) -Wait -PassThru
+    if ($unregistration.ExitCode -ne 0) {
+        throw "Existing WowType registration could not be removed (exit code $($unregistration.ExitCode))."
+    }
+}
+if ($legacyMachineRegistration) {
+    Remove-Item "Registry::HKEY_LOCAL_MACHINE\Software\Classes\CLSID\$classId" `
+        -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
-Copy-Item (Join-Path $PackageDirectory 'WowTypeTextService.dll') $installDirectory -Force
-Copy-Item (Join-Path $PackageDirectory 'wowtype_core.dll') $installDirectory -Force
-Copy-Item (Join-Path $PackageDirectory 'data') (Join-Path $installDirectory 'data') -Recurse -Force
-Copy-Item (Join-Path $PackageDirectory 'settings.ps1') $installDirectory -Force
-Copy-Item (Join-Path $PackageDirectory 'uninstall.ps1') $installDirectory -Force
+Copy-Item (Join-Path $packagePath 'WowTypeTextService.dll') $installDirectory -Force
+Copy-Item (Join-Path $packagePath 'wowtype_core.dll') $installDirectory -Force
+Copy-Item (Join-Path $packagePath 'data') (Join-Path $installDirectory 'data') -Recurse -Force
+Copy-Item (Join-Path $packagePath 'settings.ps1') $installDirectory -Force
+Copy-Item (Join-Path $packagePath 'uninstall.ps1') $installDirectory -Force
 
 $dll = Join-Path $installDirectory 'WowTypeTextService.dll'
-$regsvr = Join-Path $env:WINDIR 'System32\regsvr32.exe'
 $registration = Start-Process -FilePath $regsvr -ArgumentList @('/s', $dll) -Wait -PassThru
 if ($registration.ExitCode -ne 0) {
     throw "TSF registration failed with exit code $($registration.ExitCode)"
