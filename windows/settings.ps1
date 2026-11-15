@@ -44,6 +44,13 @@ $enabled.Location = New-Object Drawing.Point(22, 20)
 $enabled.AutoSize = $true
 $form.Controls.Add($enabled)
 
+$preload = New-Object System.Windows.Forms.CheckBox
+$preload.Text = 'Load language model'
+$preload.Checked = (Get-ConfigValue 'PreloadLanguageModel' 'False') -eq 'True'
+$preload.Location = New-Object Drawing.Point(260, 20)
+$preload.AutoSize = $true
+$form.Controls.Add($preload)
+
 $fields = @(
     @{ Key = 'TranslateBaseUrl'; Label = 'API base URL'; Default = 'https://api.openai.com/v1'; Y = 67 },
     @{ Key = 'TranslateModel'; Label = 'Model'; Default = 'gpt-4o-mini'; Y = 113 },
@@ -95,6 +102,7 @@ $save.Add_Click({
     New-Item -ItemType Directory -Force -Path $supportDirectory | Out-Null
     $text = Get-ConfigText
     $text = Set-ConfigValue $text 'Translate' $(if ($enabled.Checked) { 'True' } else { 'False' })
+    $text = Set-ConfigValue $text 'PreloadLanguageModel' $(if ($preload.Checked) { 'True' } else { 'False' })
     $text = Set-ConfigValue $text 'TranslateLocal' 'False'
     foreach ($field in $fields) {
         $text = Set-ConfigValue $text $field.Key $inputs[$field.Key].Text.Trim()

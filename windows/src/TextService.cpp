@@ -347,7 +347,13 @@ bool TextService::InitializeCore() {
     std::call_once(g_engineOnce, [this] {
         const auto lexicon = ToUtf8((std::filesystem::path(dataDirectory_) / L"lexicon.tsv").wstring());
         const auto bigram = ToUtf8((std::filesystem::path(dataDirectory_) / L"words.lm").wstring());
-        g_sharedEngine = wowtype_engine_new(lexicon.c_str(), bigram.c_str());
+        // TSF runs in-process, so every host that switches to this input method pays the
+        // initialisation cost once. Parsing the 37 MB word language model dominates that
+        // cost, so it is opt-in: without it startup only parses the lexicon snapshot and
+        // the switcher feels immediate, at the price of weaker long-sentence ranking.
+        const bool preload = Enabled(config_, "PreloadLanguageModel", false);
+        g_sharedEngine = preload ? wowtype_engine_new(lexicon.c_str(), bigram.c_str())
+                                 : wowtype_engine_new(lexicon.c_str(), nullptr);
         if (!g_sharedEngine) g_sharedEngine = wowtype_engine_new(lexicon.c_str(), nullptr);
         // The engine is shared for this process and has no per-instance owner. Keep
         // this DLL loaded so its once_flag and the Rust handle stay valid together.

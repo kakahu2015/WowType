@@ -17,6 +17,10 @@ The installer registers WowType for the current Windows user and normally does n
 
 To remove it, switch to another input method, then open **Start > WowType > Uninstall WowType** or double-click `uninstall.bat` in the extracted package. Legacy machine-wide registrations trigger a one-time administrator prompt. Your translation settings and API key are kept.
 
+## Switching performance
+
+TSF loads the text service inside every application that switches to it, and each host runs the engine once. Parsing the 37 MB word language model dominates that one-time cost, so it is off by default: switching stays immediate and the 550k-word lexicon is fully available, only long-sentence ranking is weaker. Tick **Load language model** in WowType Settings when you prefer better sentence candidates over an instant switch.
+
 ## Typing and translation
 
 - Type pinyin and choose candidates with number keys, arrows, or the candidate window. When there is more than one page, click **上一页 / 下一页** or press **PgUp / PgDn**; `-` / `=` also page backward / forward.

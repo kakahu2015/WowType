@@ -44,7 +44,11 @@ if ($legacyMachineRegistration) {
 New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
 Copy-Item (Join-Path $packagePath 'WowTypeTextService.dll') $installDirectory -Force
 Copy-Item (Join-Path $packagePath 'wowtype_core.dll') $installDirectory -Force
-Copy-Item (Join-Path $packagePath 'data') (Join-Path $installDirectory 'data') -Recurse -Force
+$dataDirectory = Join-Path $installDirectory 'data'
+New-Item -ItemType Directory -Force -Path $dataDirectory | Out-Null
+# Copy the contents, not the directory: copying "data" onto an existing "data"
+# produced "data\data" and doubled the footprint on reinstall.
+Copy-Item (Join-Path $packagePath 'data\*') $dataDirectory -Recurse -Force
 Copy-Item (Join-Path $packagePath 'settings.ps1') $installDirectory -Force
 Copy-Item (Join-Path $packagePath 'uninstall.ps1') $installDirectory -Force
 
